@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DoshaType
+import com.example.data.model.UserRole
 import com.example.data.repository.AyurvedaRepository
 import com.example.ui.AyurvedaUiState
 import com.example.ui.theme.NaturalBackground
@@ -52,9 +58,14 @@ import com.example.ui.theme.NaturalTextPrimary
 fun PrakritiProfileScreen(
     uiState: AyurvedaUiState,
     onAnswerQuestion: (Int, DoshaType) -> Unit,
+    onSwitchUserClicked: () -> Unit = {},
+    onNavigateToAdmin: () -> Unit = {},
+    onLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val dominant = uiState.prakritiScore.dominantDosha
+    val user = uiState.currentUser
+    val canAccessAdmin = user.role == UserRole.ADMIN || user.role == UserRole.PRACTITIONER
 
     LazyColumn(
         modifier = modifier
@@ -63,6 +74,98 @@ fun PrakritiProfileScreen(
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
+        // User Profile & Role Card
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .border(1.dp, NaturalCardBorder, RoundedCornerShape(22.dp)),
+                color = NaturalCardSurface,
+                shadowElevation = 2.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(NaturalSageContainer)
+                                    .border(1.dp, NaturalSageBorder, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = user.role.iconEmoji,
+                                    fontSize = 20.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = user.name,
+                                    fontFamily = FontFamily.Serif,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                                Text(
+                                    text = user.designation.ifEmpty { user.email },
+                                    fontSize = 11.sp,
+                                    color = NaturalOliveMuted
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = onSwitchUserClicked,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NaturalMossPrimary
+                            )
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Switch Role", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NaturalBackground)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Active Role: ${user.role.displayName}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = NaturalTextHeading
+                        )
+
+                        if (canAccessAdmin) {
+                            Text(
+                                text = "Go to Admin Dashboard →",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalMossPrimary,
+                                modifier = Modifier.clickable(onClick = onNavigateToAdmin)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Top Header
         item {
             Column {
@@ -263,6 +366,60 @@ fun PrakritiProfileScreen(
                         color = NaturalTextPrimary.copy(alpha = 0.85f),
                         lineHeight = 16.sp
                     )
+                }
+            }
+        }
+
+        // Account & Security Card
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp)),
+                color = NaturalCardSurface
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "ACCOUNT & SESSION SECURITY",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp,
+                        color = NaturalOliveMuted
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = user.name,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalTextHeading
+                            )
+                            Text(
+                                text = "Signed in as ${user.email}",
+                                fontSize = 11.sp,
+                                color = NaturalOliveMuted
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onLogout,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NaturalTerracotta
+                            ),
+                            modifier = Modifier.testTag("profile_logout_button")
+                        ) {
+                            Text("Sign Out", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

@@ -46,7 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.model.AppUser
 import com.example.data.model.AyurvedaMedicine
+import com.example.data.model.UserRole
 import com.example.ui.AppTab
 import com.example.ui.theme.NaturalBackground
 import com.example.ui.theme.NaturalCardBorder
@@ -66,6 +68,8 @@ import com.example.ui.theme.NaturalTextPrimary
 @Composable
 fun AyurTopHeader(
     userName: String = "Arjun",
+    userRole: UserRole = UserRole.PATIENT,
+    onProfileClick: () -> Unit = {},
     searchQuery: String,
     onSearchQueryChanged: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -84,13 +88,40 @@ fun AyurTopHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(
-                    text = "NAMASTE, ${userName.uppercase()}",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.6.sp,
-                    color = NaturalOliveMuted
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "NAMASTE, ${userName.uppercase()}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.4.sp,
+                        color = NaturalOliveMuted
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                when (userRole) {
+                                    UserRole.ADMIN -> NaturalTerracotta.copy(alpha = 0.15f)
+                                    UserRole.PRACTITIONER -> NaturalSageContainer
+                                    UserRole.PATIENT -> NaturalParchmentContainer
+                                }
+                            )
+                            .clickable(onClick = onProfileClick)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "${userRole.iconEmoji} ${userRole.badgeLabel}",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = when (userRole) {
+                                UserRole.ADMIN -> NaturalTerracotta
+                                UserRole.PRACTITIONER -> NaturalMossDark
+                                UserRole.PATIENT -> NaturalEarthGold
+                            }
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "AyurGuide",
@@ -107,7 +138,9 @@ fun AyurTopHeader(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(NaturalSageContainer)
-                    .border(2.dp, Color.White, CircleShape),
+                    .border(2.dp, Color.White, CircleShape)
+                    .clickable(onClick = onProfileClick)
+                    .testTag("top_header_avatar"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -183,9 +216,12 @@ fun AyurTopHeader(
 @Composable
 fun AyurBottomNav(
     currentTab: AppTab,
+    currentUserRole: UserRole = UserRole.PATIENT,
     onTabSelected: (AppTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val showAdminTab = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.PRACTITIONER
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -234,6 +270,15 @@ fun AyurBottomNav(
                     onClick = { onTabSelected(AppTab.PROFILE) },
                     testTag = "nav_profile"
                 )
+                if (showAdminTab) {
+                    NavItem(
+                        emoji = if (currentUserRole == UserRole.ADMIN) "⚡" else "⚕️",
+                        label = if (currentUserRole == UserRole.ADMIN) "Admin" else "Clinic",
+                        isSelected = currentTab == AppTab.ADMIN,
+                        onClick = { onTabSelected(AppTab.ADMIN) },
+                        testTag = "nav_admin"
+                    )
+                }
             }
         }
     }

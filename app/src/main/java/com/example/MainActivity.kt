@@ -26,10 +26,13 @@ import com.example.ui.AyurvedaViewModel
 import com.example.ui.components.AyurBottomNav
 import com.example.ui.components.AyurMedicineDetailDialog
 import com.example.ui.components.AyurTopHeader
+import com.example.ui.screens.AdminDashboardScreen
+import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.CatalogueScreen
 import com.example.ui.screens.HealthInsightsScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.PrakritiProfileScreen
+import com.example.ui.screens.SwitchUserDialog
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NaturalBackground
 
@@ -63,6 +66,25 @@ fun AyurvedaApp(
     }
   }
 
+  // Show Auth Screen (Login / Signup / Forgot Password) if not authenticated
+  if (!uiState.isAuthenticated) {
+    AuthScreen(
+      uiState = uiState,
+      onSetAuthMode = { viewModel.setAuthMode(it) },
+      onLogin = { email, pass -> viewModel.login(email, pass) },
+      onQuickLoginAs = { viewModel.quickLoginAs(it) },
+      onSignup = { name, email, pass, role, prakriti, desig ->
+        viewModel.signup(name, email, pass, role, prakriti, desig)
+      },
+      onRequestReset = { viewModel.requestPasswordReset(it) },
+      onCompleteReset = { email, otp, newPass ->
+        viewModel.completePasswordReset(email, otp, newPass)
+      },
+      onDismissError = { viewModel.clearAuthMessages() }
+    )
+    return
+  }
+
   Scaffold(
     modifier = modifier
       .fillMaxSize()
@@ -71,11 +93,13 @@ fun AyurvedaApp(
     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     topBar = {
       AyurTopHeader(
-        userName = "Arjun",
+        userName = uiState.currentUser.name.split(" ").firstOrNull() ?: uiState.currentUser.name,
+        userRole = uiState.currentUser.role,
+        onProfileClick = { viewModel.setSwitchUserDialogOpen(true) },
         searchQuery = uiState.searchQuery,
         onSearchQueryChanged = { query ->
           viewModel.onSearchQueryChanged(query)
-          if (query.isNotEmpty() && uiState.currentTab != AppTab.LIBRARY) {
+          if (query.isNotEmpty() && uiState.currentTab != AppTab.LIBRARY && uiState.currentTab != AppTab.ADMIN) {
             viewModel.setTab(AppTab.LIBRARY)
           }
         }
@@ -84,6 +108,7 @@ fun AyurvedaApp(
     bottomBar = {
       AyurBottomNav(
         currentTab = uiState.currentTab,
+        currentUserRole = uiState.currentUser.role,
         onTabSelected = { viewModel.setTab(it) }
       )
     }
@@ -123,10 +148,46 @@ fun AyurvedaApp(
 
         AppTab.PROFILE -> PrakritiProfileScreen(
           uiState = uiState,
-          onAnswerQuestion = { qId, dosha -> viewModel.answerPrakriti(qId, dosha) }
+          onAnswerQuestion = { qId, dosha -> viewModel.answerPrakriti(qId, dosha) },
+          onSwitchUserClicked = { viewModel.setSwitchUserDialogOpen(true) },
+          onNavigateToAdmin = { viewModel.setTab(AppTab.ADMIN) },
+          onLogout = { viewModel.logout() }
+        )
+
+        AppTab.ADMIN -> AdminDashboardScreen(
+          uiState = uiState,
+          onSwitchUser = { viewModel.switchUser(it) },
+          onUpdateUserRole = { id, role -> viewModel.updateUserRole(id, role) },
+          onUpdateUserStatus = { id, status -> viewModel.updateUserStatus(id, status) },
+          onAddNewUser = { viewModel.addNewUser(it) },
+          onSetUserRoleFilter = { viewModel.setUserRoleFilter(it) },
+          onSelectUserForDetail = { viewModel.selectUserForDetail(it) },
+          onOpenAddMedicineDialog = { viewModel.setAddMedicineDialogOpen(it) },
+          onOpenAddUserDialog = { viewModel.setAddUserDialogOpen(it) },
+          onOpenSwitchUserDialog = { viewModel.setSwitchUserDialogOpen(it) },
+          onAddNewMedicine = { viewModel.addNewMedicine(it) },
+          onUpdateStock = { id, stock -> viewModel.updateMedicineStock(id, stock) },
+          onToggleVitality = { viewModel.toggleMedicineVitality(it) },
+          onDeleteMedicine = { viewModel.deleteMedicine(it) },
+          onSelectMedicine = { viewModel.selectMedicine(it) },
+          onPrescribeToPatient = { med, patientId -> viewModel.prescribeMedicineToPatient(med, patientId) }
         )
       }
     }
+  }
+
+  // Global Switch User Dialog
+  if (uiState.isSwitchUserDialogOpen) {
+    SwitchUserDialog(
+      currentUserId = uiState.currentUser.id,
+      users = uiState.allUsers,
+      onSelectUser = { viewModel.switchUser(it) },
+      onDismiss = { viewModel.setSwitchUserDialogOpen(false) },
+      onLogout = {
+        viewModel.setSwitchUserDialogOpen(false)
+        viewModel.logout()
+      }
+    )
   }
 
   // Detailed Modal Dialog when a medicine is selected

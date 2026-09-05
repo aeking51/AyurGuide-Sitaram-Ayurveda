@@ -1,5 +1,7 @@
 package com.example.data.repository
 
+import com.example.data.model.AppUser
+import com.example.data.model.AuditLogEntry
 import com.example.data.model.AyurvedaIngredient
 import com.example.data.model.AyurvedaMedicine
 import com.example.data.model.DailyDoseLog
@@ -9,6 +11,8 @@ import com.example.data.model.DoshaType
 import com.example.data.model.DravyagunaProfile
 import com.example.data.model.FormulationCategory
 import com.example.data.model.PrakritiQuestion
+import com.example.data.model.UserRole
+import com.example.data.model.UserStatus
 
 object AyurvedaRepository {
 
@@ -535,6 +539,158 @@ object AyurvedaRepository {
             optionVata = "Light, restless, prone to waking up between 2 AM and 4 AM",
             optionPitta = "Moderate (6-7 hrs), vivid dreams, wakes up alert and ready",
             optionKapha = "Deep, heavy (8+ hrs), difficult to wake up in early morning"
+        )
+    )
+
+    val defaultUsers: List<AppUser> = listOf(
+        AppUser(
+            id = "user_admin_vasant",
+            name = "Dr. Vasant Sharma",
+            email = "admin.vasant@ayurguide.org",
+            role = UserRole.ADMIN,
+            prakriti = DoshaType.TRIDOSHIC,
+            status = UserStatus.ACTIVE,
+            designation = "Chief Vaidya & Clinical Director",
+            phone = "+91 98450 11001",
+            registeredDate = "Oct 15, 2024",
+            lastActive = "Active now",
+            adherencePercent = 98,
+            clinicalNotes = "Oversees Ayurvedic Pharmacopoeia compliance and formulation batches."
+        ),
+        AppUser(
+            id = "user_practitioner_meera",
+            name = "Dr. Meera Nambiar",
+            email = "dr.meera@ayurguide.org",
+            role = UserRole.PRACTITIONER,
+            prakriti = DoshaType.PITTA,
+            status = UserStatus.ACTIVE,
+            designation = "Senior Ayurvedic Physician",
+            phone = "+91 98450 22002",
+            registeredDate = "Nov 02, 2024",
+            lastActive = "12 mins ago",
+            adherencePercent = 94,
+            clinicalNotes = "Specialist in Dravyaguna (Herbal pharmacology) & Kayachikitsa."
+        ),
+        AppUser(
+            id = "user_practitioner_kabir",
+            name = "Dr. Kabir Deshmukh",
+            email = "dr.kabir@ayurguide.org",
+            role = UserRole.PRACTITIONER,
+            prakriti = DoshaType.VATA,
+            status = UserStatus.ACTIVE,
+            designation = "Consultant Vaidya",
+            phone = "+91 98450 33003",
+            registeredDate = "Jan 05, 2025",
+            lastActive = "1 hour ago",
+            adherencePercent = 91,
+            clinicalNotes = "Focuses on Dinacharya routines and nervous balance."
+        ),
+        AppUser(
+            id = "user_patient_arjun",
+            name = "Arjun Mehta",
+            email = "arjun.m@example.com",
+            role = UserRole.PATIENT,
+            prakriti = DoshaType.PITTA,
+            status = UserStatus.ACTIVE,
+            designation = "Wellness Seeker",
+            phone = "+91 98450 44004",
+            registeredDate = "Jan 12, 2026",
+            lastActive = "Just now",
+            adherencePercent = 88,
+            assignedPractitioner = "Dr. Meera Nambiar",
+            clinicalNotes = "Monitoring Pitta digestive acid sensitivity; taking Triphala & Brahmi."
+        ),
+        AppUser(
+            id = "user_patient_priya",
+            name = "Priya Sundaram",
+            email = "priya.s@example.com",
+            role = UserRole.PATIENT,
+            prakriti = DoshaType.VATA,
+            status = UserStatus.ACTIVE,
+            designation = "Wellness Seeker",
+            phone = "+91 98450 55005",
+            registeredDate = "Feb 01, 2026",
+            lastActive = "3 hours ago",
+            adherencePercent = 78,
+            assignedPractitioner = "Dr. Kabir Deshmukh",
+            clinicalNotes = "Vata insomnia management with Ashwagandha and evening Golden Milk."
+        ),
+        AppUser(
+            id = "user_patient_devika",
+            name = "Devika Roy",
+            email = "devika.r@example.com",
+            role = UserRole.PATIENT,
+            prakriti = DoshaType.KAPHA,
+            status = UserStatus.ACTIVE,
+            designation = "Wellness Seeker",
+            phone = "+91 98450 66006",
+            registeredDate = "Feb 14, 2026",
+            lastActive = "Yesterday",
+            adherencePercent = 82,
+            assignedPractitioner = "Dr. Meera Nambiar",
+            clinicalNotes = "Kapha metabolic rekindling with Dashamoola & ginger decoctions."
+        ),
+        AppUser(
+            id = "user_patient_rahul",
+            name = "Rahul Verma",
+            email = "rahul.v@example.com",
+            role = UserRole.PATIENT,
+            prakriti = DoshaType.PITTA,
+            status = UserStatus.SUSPENDED,
+            designation = "Account Suspended",
+            phone = "+91 98450 77007",
+            registeredDate = "Dec 18, 2025",
+            lastActive = "5 days ago",
+            adherencePercent = 45,
+            clinicalNotes = "Requires consultation validation before resuming herb regimen."
+        )
+    )
+
+    val defaultAuditLogs: List<AuditLogEntry> = listOf(
+        AuditLogEntry(
+            id = "log_1",
+            timestamp = "10:45 AM Today",
+            actorName = "Dr. Vasant Sharma (Admin)",
+            actionType = "FORMULATION_VERIFY",
+            targetItem = "Ashwagandha Churna",
+            details = "Batch #AYUR-2026-B12 passed heavy metals & microbial purity assays under API guidelines.",
+            isWarning = false
+        ),
+        AuditLogEntry(
+            id = "log_2",
+            timestamp = "09:30 AM Today",
+            actorName = "Dr. Meera Nambiar (Vaidya)",
+            actionType = "PRESCRIPTION_ISSUED",
+            targetItem = "Triphala Churna (3g)",
+            details = "Prescribed to patient Arjun Mehta for Pitta digestive regulation with warm water anupana.",
+            isWarning = false
+        ),
+        AuditLogEntry(
+            id = "log_3",
+            timestamp = "Yesterday 04:15 PM",
+            actorName = "Inventory System",
+            actionType = "LOW_STOCK_ALERT",
+            targetItem = "Kumkumadi Tailam",
+            details = "Stock dropped to 8 units. Automated re-order threshold reached for raw Saffron (Kumkuma).",
+            isWarning = true
+        ),
+        AuditLogEntry(
+            id = "log_4",
+            timestamp = "Yesterday 11:20 AM",
+            actorName = "Dr. Vasant Sharma (Admin)",
+            actionType = "ROLE_MODIFICATION",
+            targetItem = "Dr. Kabir Deshmukh",
+            details = "Privilege granted: Clinical Vaidya Practitioner credentials certified.",
+            isWarning = false
+        ),
+        AuditLogEntry(
+            id = "log_5",
+            timestamp = "Mar 01, 2026",
+            actorName = "Security Gateway",
+            actionType = "ACCOUNT_SUSPENSION",
+            targetItem = "Rahul Verma",
+            details = "Temporarily suspended due to unconfirmed contraindication flags.",
+            isWarning = true
         )
     )
 }

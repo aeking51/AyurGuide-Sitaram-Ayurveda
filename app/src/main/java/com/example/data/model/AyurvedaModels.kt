@@ -60,7 +60,54 @@ data class AyurvedaMedicine(
     val contraindications: List<String>,
     val pathyaWholesome: List<String>, // Recommended foods
     val apathyaAvoid: List<String>,    // Foods to avoid
-    val isDailyVitality: Boolean = false
+    val isDailyVitality: Boolean = false,
+    val stockUnits: Int = 45,
+    val batchNumber: String = "AYUR-2026-B12",
+    val isLowStock: Boolean = false
+)
+
+enum class UserRole(
+    val displayName: String,
+    val badgeLabel: String,
+    val description: String,
+    val iconEmoji: String
+) {
+    ADMIN("Chief Administrator", "ADMIN", "Full operational & clinical control, formulation inventory, user directory, system audits", "⚡"),
+    PRACTITIONER("Ayurvedic Vaidya", "PRACTITIONER", "Clinical consultations, formulation prescribing, patient health reviews", "⚕️"),
+    PATIENT("Wellness Seeker", "PATIENT", "Personal daily routines, dosha harmony, hydration, classical herb library", "🌿")
+}
+
+enum class UserStatus(val label: String) {
+    ACTIVE("Active"),
+    SUSPENDED("Suspended"),
+    PENDING("Pending Verification")
+}
+
+data class AppUser(
+    val id: String,
+    val name: String,
+    val email: String,
+    val role: UserRole,
+    val prakriti: DoshaType = DoshaType.PITTA,
+    val status: UserStatus = UserStatus.ACTIVE,
+    val designation: String = "",
+    val phone: String = "+91 98450 12345",
+    val registeredDate: String = "Jan 12, 2026",
+    val lastActive: String = "Just now",
+    val adherencePercent: Int = 85,
+    val assignedPractitioner: String? = null,
+    val clinicalNotes: String = "",
+    val password: String = "ayur123"
+)
+
+data class AuditLogEntry(
+    val id: String,
+    val timestamp: String,
+    val actorName: String,
+    val actionType: String,
+    val targetItem: String,
+    val details: String,
+    val isWarning: Boolean = false
 )
 
 data class DailyHabit(
@@ -97,3 +144,4 @@ data class PrakritiScore(
     val kaphaScore: Int = 0,
     val dominantDosha: DoshaType = DoshaType.PITTA
 )
+
