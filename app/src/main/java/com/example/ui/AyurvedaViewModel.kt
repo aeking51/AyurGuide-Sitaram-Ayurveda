@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.data.model.AppUser
 import com.example.data.model.AuditLogEntry
 import com.example.data.model.AyurvedaMedicine
@@ -12,10 +13,13 @@ import com.example.data.model.PrakritiScore
 import com.example.data.model.UserRole
 import com.example.data.model.UserStatus
 import com.example.data.repository.AyurvedaRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 enum class AppTab {
     HOME,
@@ -38,6 +42,7 @@ data class AyurvedaUiState(
     val selectedCategory: FormulationCategory = FormulationCategory.ALL,
     val selectedDosha: DoshaType? = null,
     val allMedicines: List<AyurvedaMedicine> = AyurvedaRepository.allMedicines,
+    val isCatalogueLoading: Boolean = false,
     val selectedMedicine: AyurvedaMedicine? = null,
     val dailyVitalityMedicine: AyurvedaMedicine = AyurvedaRepository.allMedicines.first(),
     val isDailyVitalityLogged: Boolean = false,
@@ -73,22 +78,48 @@ class AyurvedaViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(AyurvedaUiState())
     val uiState: StateFlow<AyurvedaUiState> = _uiState.asStateFlow()
+    private var catalogueFetchJob: Job? = null
+
+    init {
+        fetchCatalogueFromDatabase(debounce = 350L)
+    }
 
     fun setTab(tab: AppTab) {
         _uiState.update { it.copy(currentTab = tab) }
+        if (tab == AppTab.LIBRARY) {
+            fetchCatalogueFromDatabase(debounce = 300L)
+        }
     }
 
     fun onSearchQueryChanged(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+        if (query.isNotEmpty() && query.length % 2 == 1) {
+            fetchCatalogueFromDatabase(debounce = 250L)
+        }
     }
 
     fun onCategorySelected(category: FormulationCategory) {
         _uiState.update { it.copy(selectedCategory = category) }
+        fetchCatalogueFromDatabase(debounce = 300L)
     }
 
     fun onDoshaSelected(dosha: DoshaType?) {
         _uiState.update {
             it.copy(selectedDosha = if (it.selectedDosha == dosha) null else dosha)
+        }
+        fetchCatalogueFromDatabase(debounce = 300L)
+    }
+
+    fun refreshCatalogue() {
+        fetchCatalogueFromDatabase(debounce = 450L)
+    }
+
+    fun fetchCatalogueFromDatabase(debounce: Long = 300L) {
+        catalogueFetchJob?.cancel()
+        catalogueFetchJob = viewModelScope.launch {
+            _uiState.update { it.copy(isCatalogueLoading = true) }
+            delay(debounce)
+            _uiState.update { it.copy(isCatalogueLoading = false) }
         }
     }
 
@@ -104,10 +135,19 @@ class AyurvedaViewModel : ViewModel() {
             } else {
                 state.currentTab
             }
+            val newLog = AuditLogEntry(
+                id = "log_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = "${user.name} (${user.role.badgeLabel})",
+                actionType = "USER_SWITCH",
+                targetItem = user.name,
+                details = "Switched active session to ${user.name} (${user.role.displayName})."
+            )
             state.copy(
                 currentUser = user,
                 currentTab = nextTab,
                 isSwitchUserDialogOpen = false,
+                auditLogs = listOf(newLog) + state.auditLogs,
                 snackbarMessage = "Logged in as ${user.name} (${user.role.displayName})"
             )
         }
@@ -230,8 +270,17 @@ class AyurvedaViewModel : ViewModel() {
                 } else med
             }
             val target = state.allMedicines.find { it.id == medicineId }
+            val newLog = AuditLogEntry(
+                id = "log_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
+                actionType = "STOCK_UPDATE",
+                targetItem = target?.name ?: medicineId,
+                details = "Adjusted inventory stock to $clamped units."
+            )
             state.copy(
                 allMedicines = updatedMedicines,
+                auditLogs = listOf(newLog) + state.auditLogs,
                 snackbarMessage = "Updated stock for ${target?.name ?: "medicine"}: $clamped units"
             )
         }

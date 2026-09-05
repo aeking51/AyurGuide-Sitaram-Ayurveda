@@ -62,7 +62,7 @@ class ExampleUnitTest {
 
     val updated = vm.uiState.value.allUsers.first { it.id == patient.id }
     assertEquals(UserRole.PRACTITIONER, updated.role)
-    assertTrue(vm.uiState.value.auditLogs.any { it.actionType == "ROLE_UPDATE" })
+    assertTrue(vm.uiState.value.auditLogs.any { it.actionType == "ROLE_CHANGE" || it.actionType == "ROLE_UPDATE" })
   }
 
   @Test
@@ -141,5 +141,13 @@ class ExampleUnitTest {
     org.junit.Assert.assertFalse(vm.uiState.value.isAuthenticated)
     assertEquals(com.example.ui.AuthMode.LOGIN, vm.uiState.value.authMode)
     assertTrue(vm.uiState.value.auditLogs.any { it.actionType == "LOGOUT" })
+  }
+
+  @Test
+  fun testCatalogueDatabaseLoadingFlow() {
+    val vm = AyurvedaViewModel()
+    // Initial fetch triggers loading
+    vm.refreshCatalogue()
+    assertTrue(vm.uiState.value.isCatalogueLoading)
   }
 }

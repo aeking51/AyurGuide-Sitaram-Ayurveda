@@ -135,7 +135,8 @@ fun AyurvedaApp(
           onCategorySelected = { viewModel.onCategorySelected(it) },
           onDoshaSelected = { viewModel.onDoshaSelected(it) },
           onSelectMedicine = { viewModel.selectMedicine(it) },
-          onAddToRoutine = { viewModel.addMedicineToDailyRoutine(it) }
+          onAddToRoutine = { viewModel.addMedicineToDailyRoutine(it) },
+          onRefresh = { viewModel.refreshCatalogue() }
         )
 
         AppTab.INSIGHTS -> HealthInsightsScreen(

@@ -1,5 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,16 +29,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -63,6 +77,7 @@ fun CatalogueScreen(
     onDoshaSelected: (DoshaType?) -> Unit,
     onSelectMedicine: (AyurvedaMedicine) -> Unit,
     onAddToRoutine: (AyurvedaMedicine) -> Unit,
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Filter medicines by search, category, and dosha
@@ -82,6 +97,8 @@ fun CatalogueScreen(
 
         matchesSearch && matchesCategory && matchesDosha
     }
+
+    val shimmerBrush = rememberNaturalShimmerBrush()
 
     Column(
         modifier = modifier
@@ -146,39 +163,323 @@ fun CatalogueScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // Results count label
-        Text(
-            text = "${filteredMedicines.size} CLASSICAL FORMULATIONS",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
-            color = NaturalOliveMuted,
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp)
-        )
-
-        // Medicine Catalogue List
-        LazyColumn(
+        // Dynamic Loading / Results Status Bar
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(filteredMedicines, key = { it.id }) { med ->
-                MedicineCatalogueCard(
-                    medicine = med,
-                    onClick = { onSelectMedicine(med) },
-                    onAddToRoutine = { onAddToRoutine(med) }
-                )
-            }
+            if (uiState.isCatalogueLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "PulsingLeaf")
+                    val pulseScale by infiniteTransition.animateFloat(
+                        initialValue = 0.85f,
+                        targetValue = 1.15f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(600, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "PulseScale"
+                    )
+                    Text(
+                        text = "🌿",
+                        fontSize = 12.sp,
+                        modifier = Modifier.scale(pulseScale)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "FETCHING REMEDIES FROM LOCAL DB...",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.1.sp,
+                        color = NaturalMossPrimary
+                    )
+                }
 
-            item {
-                Spacer(modifier = Modifier.height(20.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .testTag("catalogue_loading_spinner"),
+                    color = NaturalMossPrimary,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "${filteredMedicines.size} CLASSICAL FORMULATIONS",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    color = NaturalOliveMuted
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onRefresh)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .testTag("catalogue_refresh_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Sync from local DB",
+                        tint = NaturalOliveMuted,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Sync DB",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NaturalOliveMuted
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        // Animated Smooth Transition between Skeleton Loading and Loaded Medicines
+        Crossfade(
+            targetState = uiState.isCatalogueLoading,
+            animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+            label = "CatalogueContentCrossfade",
+            modifier = Modifier.fillMaxSize()
+        ) { loading ->
+            if (loading) {
+                // Subtle Shimmer Skeleton Loading Cards
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                        .testTag("catalogue_skeleton_list"),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(3) { index ->
+                        MedicineCatalogueSkeletonCard(
+                            shimmerBrush = shimmerBrush,
+                            modifier = Modifier.testTag("catalogue_skeleton_card_$index")
+                        )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                }
+            } else if (filteredMedicines.isEmpty()) {
+                // Empty State when no remedies match filters
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(22.dp)),
+                        color = NaturalCardSurface
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "🍃", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No Formulations Found",
+                                fontFamily = FontFamily.Serif,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalTextHeading
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "No Ayurvedic remedy matches the active filter criteria in local storage.",
+                                fontSize = 11.sp,
+                                color = NaturalOliveMuted,
+                                lineHeight = 15.sp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(NaturalSageContainer)
+                                    .border(1.dp, NaturalSageBorder, RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        onCategorySelected(FormulationCategory.ALL)
+                                        onDoshaSelected(null)
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Reset All Filters",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalMossDark
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Real Loaded Medicines
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                        .testTag("catalogue_medicine_list"),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(filteredMedicines, key = { it.id }) { med ->
+                        MedicineCatalogueCard(
+                            medicine = med,
+                            onClick = { onSelectMedicine(med) },
+                            onAddToRoutine = { onAddToRoutine(med) }
+                        )
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                }
             }
         }
     }
 }
+
+// -------------------------------------------------------------
+// Shimmer Skeleton Loading Card
+// -------------------------------------------------------------
+
+@Composable
+fun MedicineCatalogueSkeletonCard(
+    shimmerBrush: Brush,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .border(1.dp, NaturalCardBorder, RoundedCornerShape(22.dp)),
+        color = NaturalCardSurface,
+        shadowElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Top row: Sanskrit title & Tag skeleton
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .width(85.dp)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(170.dp)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(18.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(shimmerBrush)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Short description skeleton lines
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(shimmerBrush)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.70f)
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(shimmerBrush)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Key herbs bar skeleton
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(26.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(shimmerBrush)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bottom row: Dosage & Action Buttons skeleton
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// Real Medicine Card
+// -------------------------------------------------------------
 
 @Composable
 fun MedicineCatalogueCard(
@@ -326,4 +627,33 @@ fun MedicineCatalogueCard(
             }
         }
     }
+}
+
+// -------------------------------------------------------------
+// Natural Tones Shimmer Helper
+// -------------------------------------------------------------
+
+@Composable
+fun rememberNaturalShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "NaturalShimmerTransition")
+    val translateAnimation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "NaturalShimmerOffset"
+    )
+
+    return Brush.linearGradient(
+        colors = listOf(
+            NaturalCardSurface,
+            NaturalSageContainer.copy(alpha = 0.55f),
+            NaturalParchmentContainer.copy(alpha = 0.70f),
+            NaturalCardSurface
+        ),
+        start = Offset(translateAnimation - 400f, translateAnimation - 400f),
+        end = Offset(translateAnimation, translateAnimation)
+    )
 }
