@@ -1,0 +1,6 @@
+{
+  "name": "AyurGuide",
+  "description": "Ayurveda medicine catalogue featuring detailed ingredient lists, dosage recommendations, and user health tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
