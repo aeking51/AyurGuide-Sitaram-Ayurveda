@@ -1,6 +1,6 @@
 {
   "name": "AyurGuide",
-  "description": "Ayurveda medicine catalogue featuring detailed ingredient lists, dosage recommendations, and user health tracking.",
+  "description": "Sitaram Ayurveda Medicine Catalogue & Therapeutic Index featuring authentic classical formulations, detailed botanical monographs, posology guidelines, and comprehensive clinical indications.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -13,6 +13,10 @@ import com.example.data.model.PrakritiScore
 import com.example.data.model.UserRole
 import com.example.data.model.UserStatus
 import com.example.data.repository.AyurvedaRepository
+import com.example.data.repository.FirestoreRepository
+import com.example.data.repository.FirebaseAuthRepository
+import com.example.data.local.ThemePreferences
+import com.example.ui.theme.AppThemeMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +43,7 @@ enum class AuthMode {
 data class AyurvedaUiState(
     val currentTab: AppTab = AppTab.HOME,
     val searchQuery: String = "",
+    val searchHistory: List<String> = listOf("Triphala", "Ashwagandha", "Abhayarishtam", "Brahmi", "Dhanwantharam"),
     val selectedCategory: FormulationCategory = FormulationCategory.ALL,
     val selectedDosha: DoshaType? = null,
     val allMedicines: List<AyurvedaMedicine> = AyurvedaRepository.allMedicines,
@@ -57,9 +62,13 @@ data class AyurvedaUiState(
     val prakritiScore: PrakritiScore = PrakritiScore(vataScore = 1, pittaScore = 3, kaphaScore = 0, dominantDosha = DoshaType.PITTA),
     val snackbarMessage: String? = null,
     // Role-based User & Admin State
-    val currentUser: AppUser = AyurvedaRepository.defaultUsers.first(), // Starts as Admin Dr. Vasant Sharma
+    val currentUser: AppUser = AyurvedaRepository.defaultUsers.first(), // Starts as Admin Jerin MR
     val allUsers: List<AppUser> = AyurvedaRepository.defaultUsers,
     val userRoleFilter: UserRole? = null,
+    val userStatusFilter: UserStatus? = null,
+    val userSearchQuery: String = "",
+    val editingUser: AppUser? = null,
+    val userPendingDeletion: AppUser? = null,
     val auditLogs: List<AuditLogEntry> = AyurvedaRepository.defaultAuditLogs,
     val isAddMedicineDialogOpen: Boolean = false,
     val isAddUserDialogOpen: Boolean = false,
@@ -71,17 +80,98 @@ data class AyurvedaUiState(
     val authErrorMessage: String? = null,
     val authSuccessMessage: String? = null,
     val pendingResetEmail: String = "",
-    val generatedOtpCode: String? = null
+    val generatedOtpCode: String? = null,
+    // Cloud Firestore Persistence State
+    val isCloudSyncEnabled: Boolean = FirestoreRepository.isCloudConnected,
+    val cloudSyncStatus: String = if (FirestoreRepository.isCloudConnected) "Cloud Firestore Connected" else "Local Storage (Cloud Ready)",
+    // Appearance & Theme Mode (LIGHT, GLASS, DARK)
+    val appThemeMode: AppThemeMode = AppThemeMode.LIGHT
 )
 
 class AyurvedaViewModel : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AyurvedaUiState())
+    private val _uiState = MutableStateFlow(AyurvedaUiState(appThemeMode = ThemePreferences.getThemeMode()))
     val uiState: StateFlow<AyurvedaUiState> = _uiState.asStateFlow()
     private var catalogueFetchJob: Job? = null
 
     init {
+        val savedTheme = ThemePreferences.getThemeMode()
+        _uiState.update { it.copy(appThemeMode = savedTheme) }
         fetchCatalogueFromDatabase(debounce = 350L)
+        initCloudSync()
+    }
+
+    private fun initCloudSync() {
+        if (!FirestoreRepository.isCloudConnected) return
+
+        // Seed initial collections to Cloud Firestore if newly connecting
+        FirestoreRepository.seedInitialDataIfEmpty(
+            defaultUsers = AyurvedaRepository.defaultUsers,
+            defaultMedicines = AyurvedaRepository.allMedicines,
+            defaultLogs = AyurvedaRepository.defaultAuditLogs
+        )
+
+        // Observe cloud users in real-time
+        FirestoreRepository.observeUsers(
+            onSuccess = { cloudUsers ->
+                if (cloudUsers.isNotEmpty()) {
+                    _uiState.update { current ->
+                        val updatedCurrent = cloudUsers.find { it.id == current.currentUser.id } ?: current.currentUser
+                        current.copy(
+                            allUsers = cloudUsers,
+                            currentUser = updatedCurrent,
+                            isCloudSyncEnabled = true,
+                            cloudSyncStatus = "Cloud Firestore Connected"
+                        )
+                    }
+                }
+            }
+        )
+
+        // Observe cloud medicines in real-time
+        FirestoreRepository.observeMedicines(
+            onSuccess = { cloudMedicines ->
+                if (cloudMedicines.isNotEmpty()) {
+                    _uiState.update { it.copy(allMedicines = cloudMedicines) }
+                }
+            }
+        )
+
+        // Observe cloud regulatory audit logs in real-time
+        FirestoreRepository.observeAuditLogs(
+            onSuccess = { cloudLogs ->
+                if (cloudLogs.isNotEmpty()) {
+                    _uiState.update { it.copy(auditLogs = cloudLogs) }
+                }
+            }
+        )
+
+        // Observe cloud user roles collection in real-time
+        FirestoreRepository.observeUserRoles(
+            onSuccess = { roleMap ->
+                if (roleMap.isNotEmpty()) {
+                    _uiState.update { current ->
+                        val updatedUsers = current.allUsers.map { u ->
+                            val cloudRole = roleMap[u.id]
+                            if (cloudRole != null) u.copy(role = cloudRole) else u
+                        }
+                        val updatedCurrent = updatedUsers.find { it.id == current.currentUser.id } ?: current.currentUser
+                        current.copy(allUsers = updatedUsers, currentUser = updatedCurrent)
+                    }
+                }
+            }
+        )
+
+        // Auto-link active Firebase Auth session if present
+        val fbUser = FirebaseAuthRepository.currentFirebaseUser
+        if (fbUser != null) {
+            val matched = _uiState.value.allUsers.find {
+                it.id == fbUser.uid || it.email.equals(fbUser.email, ignoreCase = true)
+            }
+            if (matched != null) {
+                _uiState.update { it.copy(currentUser = matched, isAuthenticated = true) }
+            }
+        }
     }
 
     fun setTab(tab: AppTab) {
@@ -96,6 +186,34 @@ class AyurvedaViewModel : ViewModel() {
         if (query.isNotEmpty() && query.length % 2 == 1) {
             fetchCatalogueFromDatabase(debounce = 250L)
         }
+    }
+
+    fun addSearchQueryToHistory(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        _uiState.update { state ->
+            val updated = listOf(trimmed) + state.searchHistory.filterNot { it.equals(trimmed, ignoreCase = true) }
+            state.copy(searchHistory = updated.take(10))
+        }
+    }
+
+    fun removeSearchQueryFromHistory(query: String) {
+        _uiState.update { state ->
+            state.copy(searchHistory = state.searchHistory.filterNot { it.equals(query, ignoreCase = true) })
+        }
+    }
+
+    fun clearSearchHistory() {
+        _uiState.update { it.copy(searchHistory = emptyList()) }
+    }
+
+    fun performSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isNotBlank()) {
+            addSearchQueryToHistory(trimmed)
+        }
+        _uiState.update { it.copy(searchQuery = trimmed) }
+        fetchCatalogueFromDatabase(debounce = 100L)
     }
 
     fun onCategorySelected(category: FormulationCategory) {
@@ -116,8 +234,8 @@ class AyurvedaViewModel : ViewModel() {
 
     fun fetchCatalogueFromDatabase(debounce: Long = 300L) {
         catalogueFetchJob?.cancel()
+        _uiState.update { it.copy(isCatalogueLoading = true) }
         catalogueFetchJob = viewModelScope.launch {
-            _uiState.update { it.copy(isCatalogueLoading = true) }
             delay(debounce)
             _uiState.update { it.copy(isCatalogueLoading = false) }
         }
@@ -129,6 +247,17 @@ class AyurvedaViewModel : ViewModel() {
 
     // Role-Based User Management
     fun switchUser(user: AppUser) {
+        // Observe cloud doses for the switched user
+        FirestoreRepository.observeUserDoses(user.id, onSuccess = { cloudDoses ->
+            if (cloudDoses.isNotEmpty()) {
+                _uiState.update { current ->
+                    if (current.currentUser.id == user.id) {
+                        current.copy(dailyDoses = cloudDoses)
+                    } else current
+                }
+            }
+        })
+
         _uiState.update { state ->
             val nextTab = if (user.role == UserRole.PATIENT && state.currentTab == AppTab.ADMIN) {
                 AppTab.HOME
@@ -154,26 +283,51 @@ class AyurvedaViewModel : ViewModel() {
     }
 
     fun updateUserRole(userId: String, newRole: UserRole) {
+        val currentState = _uiState.value
+        val isChiefAdmin = currentState.currentUser.role == UserRole.ADMIN
+        // Strict RBAC: Only Admin can elevate another user to Practitioner or Admin privilege
+        if ((newRole == UserRole.ADMIN || newRole == UserRole.PRACTITIONER) && !isChiefAdmin) {
+            _uiState.update {
+                it.copy(snackbarMessage = "Security Policy: Only an Administrator can elevate users to Practitioner or Admin privileges.")
+            }
+            return
+        }
+
         _uiState.update { state ->
             val updatedUsers = state.allUsers.map { user ->
                 if (user.id == userId) user.copy(role = newRole) else user
             }
-            val targetUser = state.allUsers.find { it.id == userId }
+            val targetUser = state.allUsers.find { it.id == userId }?.copy(role = newRole)
+            targetUser?.let {
+                FirestoreRepository.saveUser(it)
+                FirestoreRepository.saveUserRole(it.id, it.email, newRole, state.currentUser.name)
+            }
             val updatedCurrent = if (state.currentUser.id == userId) state.currentUser.copy(role = newRole) else state.currentUser
+            val isElevatedToAdmin = newRole == UserRole.ADMIN
+            val action = if (isElevatedToAdmin) "ADMIN_ELEVATION" else "ROLE_CHANGE"
             val newLog = AuditLogEntry(
                 id = "log_${System.currentTimeMillis()}",
                 timestamp = "Just now",
                 actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
-                actionType = "ROLE_CHANGE",
+                actionType = action,
                 targetItem = targetUser?.name ?: userId,
-                details = "User role changed to ${newRole.badgeLabel} by ${state.currentUser.name}."
+                details = if (isElevatedToAdmin) {
+                    "Elevated ${targetUser?.name ?: userId} to Administrator privileges."
+                } else {
+                    "User role changed to ${newRole.badgeLabel} by ${state.currentUser.name}."
+                }
             )
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allUsers = updatedUsers,
                 currentUser = updatedCurrent,
                 selectedUserForDetail = state.selectedUserForDetail?.let { if (it.id == userId) it.copy(role = newRole) else it },
                 auditLogs = listOf(newLog) + state.auditLogs,
-                snackbarMessage = "Updated role for ${targetUser?.name ?: "user"} to ${newRole.displayName}"
+                snackbarMessage = if (isElevatedToAdmin) {
+                    "Elevated ${targetUser?.name ?: "user"} to Chief Administrator"
+                } else {
+                    "Updated role for ${targetUser?.name ?: "user"} to ${newRole.displayName}"
+                }
             )
         }
     }
@@ -183,7 +337,8 @@ class AyurvedaViewModel : ViewModel() {
             val updatedUsers = state.allUsers.map { user ->
                 if (user.id == userId) user.copy(status = newStatus) else user
             }
-            val targetUser = state.allUsers.find { it.id == userId }
+            val targetUser = state.allUsers.find { it.id == userId }?.copy(status = newStatus)
+            targetUser?.let { FirestoreRepository.saveUser(it) }
             val newLog = AuditLogEntry(
                 id = "log_${System.currentTimeMillis()}",
                 timestamp = "Just now",
@@ -193,6 +348,7 @@ class AyurvedaViewModel : ViewModel() {
                 details = "Account status set to ${newStatus.label}.",
                 isWarning = newStatus == UserStatus.SUSPENDED
             )
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allUsers = updatedUsers,
                 selectedUserForDetail = state.selectedUserForDetail?.let { if (it.id == userId) it.copy(status = newStatus) else it },
@@ -203,15 +359,28 @@ class AyurvedaViewModel : ViewModel() {
     }
 
     fun addNewUser(user: AppUser) {
+        val currentState = _uiState.value
+        val isChiefAdmin = currentState.currentUser.role == UserRole.ADMIN
+        // Admin privilege enforcement: Only admin can assign Practitioner or Admin role
+        if ((user.role == UserRole.ADMIN || user.role == UserRole.PRACTITIONER) && !isChiefAdmin) {
+            _uiState.update {
+                it.copy(snackbarMessage = "Security Policy: Only an Administrator can assign Practitioner or Admin privileges.")
+            }
+            return
+        }
+
         _uiState.update { state ->
+            val isElevatedToAdmin = user.role == UserRole.ADMIN
             val newLog = AuditLogEntry(
                 id = "log_${System.currentTimeMillis()}",
                 timestamp = "Just now",
                 actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
-                actionType = "USER_REGISTERED",
+                actionType = if (isElevatedToAdmin) "ADMIN_ELEVATION" else "USER_REGISTERED",
                 targetItem = user.name,
-                details = "Registered new user with role ${user.role.badgeLabel} and Prakriti ${user.prakriti.displayName}."
+                details = "Registered user ${user.name} (${user.role.badgeLabel}) with Prakriti ${user.prakriti.displayName}."
             )
+            FirestoreRepository.saveUser(user)
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allUsers = listOf(user) + state.allUsers,
                 isAddUserDialogOpen = false,
@@ -221,8 +390,145 @@ class AyurvedaViewModel : ViewModel() {
         }
     }
 
+    fun updateUser(updatedUser: AppUser) {
+        val currentState = _uiState.value
+        val isChiefAdmin = currentState.currentUser.role == UserRole.ADMIN
+        val existingUser = currentState.allUsers.find { it.id == updatedUser.id }
+
+        // Enforce: only admin can elevate another user to practitioner or admin
+        val isElevating = (updatedUser.role == UserRole.ADMIN || updatedUser.role == UserRole.PRACTITIONER) && existingUser?.role != updatedUser.role
+        if (isElevating && !isChiefAdmin) {
+            _uiState.update {
+                it.copy(snackbarMessage = "Security Policy: Only an Administrator can elevate users to Practitioner or Admin privileges.")
+            }
+            return
+        }
+
+        _uiState.update { state ->
+            val updatedUsers = state.allUsers.map { if (it.id == updatedUser.id) updatedUser else it }
+            val updatedCurrent = if (state.currentUser.id == updatedUser.id) updatedUser else state.currentUser
+            val isNewlyElevated = updatedUser.role == UserRole.ADMIN && existingUser?.role != UserRole.ADMIN
+            val newLog = AuditLogEntry(
+                id = "log_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
+                actionType = if (isNewlyElevated) "ADMIN_ELEVATION" else "USER_UPDATED",
+                targetItem = updatedUser.name,
+                details = if (isNewlyElevated) {
+                    "Elevated ${updatedUser.name} to Chief Administrator with full system control."
+                } else {
+                    "Updated profile details for ${updatedUser.name} (${updatedUser.role.badgeLabel})."
+                }
+            )
+            FirestoreRepository.saveUser(updatedUser)
+            FirestoreRepository.saveAuditLog(newLog)
+            state.copy(
+                allUsers = updatedUsers,
+                currentUser = updatedCurrent,
+                selectedUserForDetail = if (state.selectedUserForDetail?.id == updatedUser.id) updatedUser else state.selectedUserForDetail,
+                editingUser = null,
+                auditLogs = listOf(newLog) + state.auditLogs,
+                snackbarMessage = "Profile updated for ${updatedUser.name}"
+            )
+        }
+    }
+
+    fun deleteUser(userId: String) {
+        val currentState = _uiState.value
+        val targetUser = currentState.allUsers.find { it.id == userId } ?: return
+
+        // Safety Protection: Cannot delete root Admin Jerin MR
+        if (targetUser.name.contains("Jerin", ignoreCase = true) ||
+            targetUser.email.equals("sys.jerin@gmail.com", ignoreCase = true) ||
+            targetUser.id == "user_admin_jerin"
+        ) {
+            _uiState.update {
+                it.copy(
+                    userPendingDeletion = null,
+                    snackbarMessage = "Protected Account: Root Administrator Jerin MR cannot be deleted."
+                )
+            }
+            return
+        }
+
+        // Safety Protection: Cannot delete currently logged in account
+        if (targetUser.id == currentState.currentUser.id) {
+            _uiState.update {
+                it.copy(
+                    userPendingDeletion = null,
+                    snackbarMessage = "Security Restriction: You cannot delete your currently active session account."
+                )
+            }
+            return
+        }
+
+        _uiState.update { state ->
+            val remainingUsers = state.allUsers.filterNot { it.id == userId }
+            val newLog = AuditLogEntry(
+                id = "log_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
+                actionType = "USER_DELETED",
+                targetItem = targetUser.name,
+                details = "Account for ${targetUser.name} (${targetUser.role.badgeLabel}) permanently removed from directory.",
+                isWarning = true
+            )
+            FirestoreRepository.deleteUser(userId)
+            FirestoreRepository.saveAuditLog(newLog)
+            state.copy(
+                allUsers = remainingUsers,
+                userPendingDeletion = null,
+                selectedUserForDetail = if (state.selectedUserForDetail?.id == userId) null else state.selectedUserForDetail,
+                auditLogs = listOf(newLog) + state.auditLogs,
+                snackbarMessage = "User ${targetUser.name} permanently removed from directory"
+            )
+        }
+    }
+
+    fun resetUserPassword(userId: String) {
+        _uiState.update { state ->
+            val targetUser = state.allUsers.find { it.id == userId }
+            val updatedUsers = state.allUsers.map {
+                if (it.id == userId) it.copy(password = "ayur123") else it
+            }
+            targetUser?.let {
+                FirestoreRepository.saveUser(it.copy(password = "ayur123"))
+            }
+            val newLog = AuditLogEntry(
+                id = "log_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = "${state.currentUser.name} (${state.currentUser.role.badgeLabel})",
+                actionType = "PASSWORD_RESET",
+                targetItem = targetUser?.name ?: userId,
+                details = "Credentials reset to default (ayur123) for ${targetUser?.name}."
+            )
+            FirestoreRepository.saveAuditLog(newLog)
+            state.copy(
+                allUsers = updatedUsers,
+                auditLogs = listOf(newLog) + state.auditLogs,
+                snackbarMessage = "Password reset to default (ayur123) for ${targetUser?.name ?: "user"}"
+            )
+        }
+    }
+
+    fun onUserSearchQueryChanged(query: String) {
+        _uiState.update { it.copy(userSearchQuery = query) }
+    }
+
     fun setUserRoleFilter(role: UserRole?) {
         _uiState.update { it.copy(userRoleFilter = role) }
+    }
+
+    fun setUserStatusFilter(status: UserStatus?) {
+        _uiState.update { it.copy(userStatusFilter = status) }
+    }
+
+    fun setEditingUser(user: AppUser?) {
+        _uiState.update { it.copy(editingUser = user) }
+    }
+
+    fun setUserPendingDeletion(user: AppUser?) {
+        _uiState.update { it.copy(userPendingDeletion = user) }
     }
 
     fun selectUserForDetail(user: AppUser?) {
@@ -252,6 +558,8 @@ class AyurvedaViewModel : ViewModel() {
                 targetItem = medicine.name,
                 details = "Added new classical formulation (${medicine.category.displayName}) to master catalogue. Stock: ${medicine.stockUnits} units."
             )
+            FirestoreRepository.saveMedicine(medicine)
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allMedicines = listOf(medicine) + state.allMedicines,
                 isAddMedicineDialogOpen = false,
@@ -278,6 +586,8 @@ class AyurvedaViewModel : ViewModel() {
                 targetItem = target?.name ?: medicineId,
                 details = "Adjusted inventory stock to $clamped units."
             )
+            FirestoreRepository.updateMedicineStock(medicineId, clamped, clamped < 15)
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allMedicines = updatedMedicines,
                 auditLogs = listOf(newLog) + state.auditLogs,
@@ -302,6 +612,29 @@ class AyurvedaViewModel : ViewModel() {
         }
     }
 
+    fun updateMedicinePhoto(medicineId: String, newPhotoUrl: String) {
+        _uiState.update { state ->
+            val updatedMedicines = state.allMedicines.map { med ->
+                if (med.id == medicineId) {
+                    med.copy(photoUrl = newPhotoUrl)
+                } else med
+            }
+            val target = state.allMedicines.find { it.id == medicineId }
+            val updatedSelected = if (state.selectedMedicine?.id == medicineId) {
+                state.selectedMedicine?.copy(photoUrl = newPhotoUrl)
+            } else state.selectedMedicine
+
+            if (target != null) {
+                FirestoreRepository.saveMedicine(target.copy(photoUrl = newPhotoUrl))
+            }
+            state.copy(
+                allMedicines = updatedMedicines,
+                selectedMedicine = updatedSelected,
+                snackbarMessage = "Updated photo for ${target?.name ?: "formulation"}"
+            )
+        }
+    }
+
     fun deleteMedicine(medicineId: String) {
         _uiState.update { state ->
             val target = state.allMedicines.find { it.id == medicineId }
@@ -314,6 +647,8 @@ class AyurvedaViewModel : ViewModel() {
                 details = "Formulation archived from active dispensary.",
                 isWarning = true
             )
+            FirestoreRepository.deleteMedicine(medicineId)
+            FirestoreRepository.saveAuditLog(newLog)
             state.copy(
                 allMedicines = state.allMedicines.filter { it.id != medicineId },
                 selectedMedicine = if (state.selectedMedicine?.id == medicineId) null else state.selectedMedicine,
@@ -351,6 +686,7 @@ class AyurvedaViewModel : ViewModel() {
                     dose.copy(isLogged = newLogged, loggedAtTime = if (newLogged) "Just now" else null)
                 } else dose
             }
+            FirestoreRepository.saveUserDoses(state.currentUser.id, updatedDoses)
             state.copy(
                 isDailyVitalityLogged = newLogged,
                 dailyDoses = updatedDoses,
@@ -368,6 +704,7 @@ class AyurvedaViewModel : ViewModel() {
                 } else dose
             }
             val vitalityLogged = updated.find { it.medicineId == state.dailyVitalityMedicine.id }?.isLogged ?: state.isDailyVitalityLogged
+            FirestoreRepository.saveUserDoses(state.currentUser.id, updated)
             state.copy(dailyDoses = updated, isDailyVitalityLogged = vitalityLogged)
         }
     }
@@ -419,8 +756,10 @@ class AyurvedaViewModel : ViewModel() {
                     iconEmoji = "🌿",
                     isLogged = false
                 )
+                val updatedDoses = state.dailyDoses + newDose
+                FirestoreRepository.saveUserDoses(state.currentUser.id, updatedDoses)
                 state.copy(
-                    dailyDoses = state.dailyDoses + newDose,
+                    dailyDoses = updatedDoses,
                     snackbarMessage = "Added ${medicine.name} to Daily Routine"
                 )
             }
@@ -439,7 +778,12 @@ class AyurvedaViewModel : ViewModel() {
                 vataCount >= pittaCount && vataCount >= kaphaCount -> DoshaType.VATA
                 else -> DoshaType.KAPHA
             }
+            val updatedUser = state.currentUser.copy(prakriti = dominant)
+            val updatedUsers = state.allUsers.map { if (it.id == updatedUser.id) updatedUser else it }
+            FirestoreRepository.saveUser(updatedUser)
             state.copy(
+                currentUser = updatedUser,
+                allUsers = updatedUsers,
                 prakritiAnswers = newAnswers,
                 prakritiScore = PrakritiScore(vataCount, pittaCount, kaphaCount, dominant)
             )
@@ -459,7 +803,99 @@ class AyurvedaViewModel : ViewModel() {
     }
 
     fun login(email: String, pass: String): Boolean {
+        if (email.isBlank() || pass.isBlank()) {
+            _uiState.update { it.copy(authErrorMessage = "Please enter both email and password.") }
+            return false
+        }
         val trimmedEmail = email.trim()
+
+        if (FirebaseAuthRepository.isAuthAvailable) {
+            FirebaseAuthRepository.signInWithEmail(
+                email = trimmedEmail,
+                pass = pass,
+                onSuccess = { fbUser ->
+                    var user = _uiState.value.allUsers.firstOrNull {
+                        it.id == fbUser.uid || it.email.equals(trimmedEmail, ignoreCase = true)
+                    }
+
+                    if (user == null) {
+                        user = AppUser(
+                            id = fbUser.uid,
+                            name = fbUser.displayName ?: trimmedEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
+                            email = trimmedEmail,
+                            role = UserRole.PATIENT,
+                            prakriti = DoshaType.PITTA,
+                            status = UserStatus.ACTIVE,
+                            designation = "Wellness Seeker",
+                            registeredDate = "Today",
+                            lastActive = "Just now",
+                            password = pass
+                        )
+                        FirestoreRepository.saveUser(user)
+                        FirestoreRepository.saveUserRole(user.id, user.email, user.role, "FIREBASE_SIGNIN_SYNC")
+                    }
+
+                    if (user.status == UserStatus.SUSPENDED) {
+                        FirebaseAuthRepository.signOut()
+                        _uiState.update { it.copy(authErrorMessage = "This account is suspended. Contact clinical administrator.") }
+                        return@signInWithEmail
+                    }
+
+                    val loginLog = AuditLogEntry(
+                        id = "audit_${System.currentTimeMillis()}",
+                        timestamp = "Just now",
+                        actorName = user.name,
+                        actionType = "FIREBASE_LOGIN_SUCCESS",
+                        targetItem = user.role.displayName,
+                        details = "Authenticated via Firebase Auth (${user.role.badgeLabel})."
+                    )
+                    FirestoreRepository.saveAuditLog(loginLog)
+
+                    _uiState.update { state ->
+                        state.copy(
+                            currentUser = user,
+                            isAuthenticated = true,
+                            authErrorMessage = null,
+                            authSuccessMessage = "Welcome back, ${user.name}!",
+                            auditLogs = listOf(loginLog) + state.auditLogs
+                        )
+                    }
+                },
+                onError = { errorMsg ->
+                    // Fallback to local accounts (e.g. pre-seeded administrative profiles)
+                    val localUser = _uiState.value.allUsers.firstOrNull { it.email.equals(trimmedEmail, ignoreCase = true) }
+                    if (localUser != null && (pass.isEmpty() || localUser.password == pass)) {
+                        if (localUser.status == UserStatus.SUSPENDED) {
+                            _uiState.update { it.copy(authErrorMessage = "This account is suspended. Contact clinical administrator.") }
+                        } else {
+                            val loginLog = AuditLogEntry(
+                                id = "audit_${System.currentTimeMillis()}",
+                                timestamp = "Just now",
+                                actorName = localUser.name,
+                                actionType = "LOGIN_SUCCESS",
+                                targetItem = localUser.role.displayName,
+                                details = "Logged in successfully to AyurGuide portal."
+                            )
+                            FirestoreRepository.saveAuditLog(loginLog)
+                            _uiState.update { state ->
+                                state.copy(
+                                    currentUser = localUser,
+                                    isAuthenticated = true,
+                                    authErrorMessage = null,
+                                    authSuccessMessage = "Welcome back, ${localUser.name}!",
+                                    auditLogs = listOf(loginLog) + state.auditLogs
+                                )
+                            }
+                        }
+                    } else {
+                        _uiState.update { it.copy(authErrorMessage = errorMsg) }
+                    }
+                }
+            )
+            return true
+        }
+
+        // Local / Offline fallback
         val user = _uiState.value.allUsers.firstOrNull { it.email.equals(trimmedEmail, ignoreCase = true) }
         if (user == null) {
             _uiState.update { it.copy(authErrorMessage = "No account found with this email. Please check or sign up.") }
@@ -482,6 +918,8 @@ class AyurvedaViewModel : ViewModel() {
             targetItem = user.role.displayName,
             details = "Logged in successfully to AyurGuide portal."
         )
+
+        FirestoreRepository.saveAuditLog(loginLog)
 
         _uiState.update { state ->
             state.copy(
@@ -506,11 +944,50 @@ class AyurvedaViewModel : ViewModel() {
         }
     }
 
+    fun loginAsGuest() {
+        val guestUser = AppUser(
+            id = "guest_user",
+            name = "Guest Explorer",
+            email = "guest@ayurguide.local",
+            role = UserRole.GUEST,
+            prakriti = DoshaType.VATA,
+            status = UserStatus.ACTIVE,
+            designation = "Guest Access (Limited)",
+            phone = "N/A",
+            registeredDate = "Today",
+            lastActive = "Active now",
+            adherencePercent = 0,
+            clinicalNotes = "Limited read-only guest session."
+        )
+
+        val guestLog = AuditLogEntry(
+            id = "audit_${System.currentTimeMillis()}",
+            timestamp = "Just now",
+            actorName = guestUser.name,
+            actionType = "GUEST_ACCESS",
+            targetItem = "Ayurvedic Library",
+            details = "Logged in as Guest with limited read-only permissions."
+        )
+        FirestoreRepository.saveAuditLog(guestLog)
+
+        _uiState.update { state ->
+            state.copy(
+                currentUser = guestUser,
+                isAuthenticated = true,
+                currentTab = AppTab.HOME,
+                authErrorMessage = null,
+                authSuccessMessage = "Welcome! You are browsing with limited guest access.",
+                snackbarMessage = "Browsing with limited guest access • Sign in anytime for clinical features",
+                auditLogs = listOf(guestLog) + state.auditLogs
+            )
+        }
+    }
+
     fun signup(
         name: String,
         email: String,
         pass: String,
-        role: UserRole,
+        role: UserRole = UserRole.PATIENT,
         prakriti: DoshaType,
         designation: String = ""
     ): Boolean {
@@ -524,14 +1001,67 @@ class AyurvedaViewModel : ViewModel() {
             return false
         }
 
+        // Whenever a new user creates an account, default role is strictly Wellness Seeker (UserRole.PATIENT)
+        val defaultRole = UserRole.PATIENT
+
+        if (FirebaseAuthRepository.isAuthAvailable) {
+            FirebaseAuthRepository.signUpWithEmail(
+                email = trimmedEmail,
+                pass = pass,
+                onSuccess = { fbUser ->
+                    val newUser = AppUser(
+                        id = fbUser.uid,
+                        name = name.trim(),
+                        email = trimmedEmail,
+                        role = defaultRole,
+                        prakriti = prakriti,
+                        status = UserStatus.ACTIVE,
+                        designation = designation.ifBlank { "Wellness Seeker" },
+                        registeredDate = "Today",
+                        lastActive = "Just now",
+                        password = pass
+                    )
+
+                    val regLog = AuditLogEntry(
+                        id = "audit_${System.currentTimeMillis()}",
+                        timestamp = "Just now",
+                        actorName = newUser.name,
+                        actionType = "FIREBASE_REGISTER",
+                        targetItem = "${defaultRole.badgeLabel} ACCOUNT",
+                        details = "New ${defaultRole.displayName} registered via Firebase Auth with ${prakriti.displayName} constitution."
+                    )
+
+                    FirestoreRepository.saveUser(newUser)
+                    FirestoreRepository.saveUserRole(newUser.id, newUser.email, defaultRole, "FIREBASE_SELF_REGISTRATION")
+                    FirestoreRepository.saveAuditLog(regLog)
+
+                    _uiState.update { state ->
+                        state.copy(
+                            allUsers = state.allUsers + newUser,
+                            currentUser = newUser,
+                            isAuthenticated = true,
+                            authErrorMessage = null,
+                            authSuccessMessage = "Firebase Account created! Welcome, ${newUser.name}.",
+                            auditLogs = listOf(regLog) + state.auditLogs
+                        )
+                    }
+                },
+                onError = { errorMsg ->
+                    _uiState.update { it.copy(authErrorMessage = errorMsg) }
+                }
+            )
+            return true
+        }
+
+        // Fallback for local testing / offline mode
         val newUser = AppUser(
             id = "user_${System.currentTimeMillis()}",
             name = name.trim(),
             email = trimmedEmail,
-            role = role,
+            role = defaultRole,
             prakriti = prakriti,
             status = UserStatus.ACTIVE,
-            designation = designation.ifBlank { role.displayName },
+            designation = designation.ifBlank { "Wellness Seeker" },
             registeredDate = "Today",
             lastActive = "Just now",
             password = pass
@@ -542,9 +1072,13 @@ class AyurvedaViewModel : ViewModel() {
             timestamp = "Just now",
             actorName = newUser.name,
             actionType = "USER_REGISTERED",
-            targetItem = "${role.badgeLabel} ACCOUNT",
-            details = "New ${role.displayName} registered with ${prakriti.displayName} constitution."
+            targetItem = "${defaultRole.badgeLabel} ACCOUNT",
+            details = "New ${defaultRole.displayName} registered with ${prakriti.displayName} constitution."
         )
+
+        FirestoreRepository.saveUser(newUser)
+        FirestoreRepository.saveUserRole(newUser.id, newUser.email, defaultRole, "LOCAL_REGISTRATION")
+        FirestoreRepository.saveAuditLog(regLog)
 
         _uiState.update { state ->
             state.copy(
@@ -571,6 +1105,14 @@ class AyurvedaViewModel : ViewModel() {
             return false
         }
 
+        if (FirebaseAuthRepository.isAuthAvailable) {
+            FirebaseAuthRepository.sendPasswordResetEmail(
+                email = trimmed,
+                onSuccess = {},
+                onError = {}
+            )
+        }
+
         val otp = (100000..999999).random().toString()
         _uiState.update {
             it.copy(
@@ -578,7 +1120,7 @@ class AyurvedaViewModel : ViewModel() {
                 generatedOtpCode = otp,
                 authMode = AuthMode.OTP_RESET,
                 authErrorMessage = null,
-                authSuccessMessage = "Verification OTP code sent to $trimmed: $otp"
+                authSuccessMessage = "Password reset instructions dispatched. Verification OTP code: $otp"
             )
         }
         return true
@@ -603,6 +1145,12 @@ class AyurvedaViewModel : ViewModel() {
             details = "Password reset verified via OTP."
         )
 
+        val targetUser = _uiState.value.allUsers.find { it.email.equals(email, ignoreCase = true) }
+        targetUser?.let {
+            FirestoreRepository.saveUser(it.copy(password = newPassword))
+        }
+        FirestoreRepository.saveAuditLog(resetLog)
+
         _uiState.update { state ->
             val updatedUsers = state.allUsers.map { u ->
                 if (u.email.equals(email, ignoreCase = true)) u.copy(password = newPassword) else u
@@ -625,7 +1173,132 @@ class AyurvedaViewModel : ViewModel() {
         return true
     }
 
+    fun setAppThemeMode(themeMode: AppThemeMode) {
+        ThemePreferences.setThemeMode(themeMode)
+        _uiState.update { it.copy(appThemeMode = themeMode) }
+    }
+
+    fun updateCurrentUserProfile(
+        name: String,
+        designation: String,
+        phone: String,
+        clinicalNotes: String = ""
+    ) {
+        val trimmedName = name.trim()
+        if (_uiState.value.currentUser.role == UserRole.GUEST) {
+            _uiState.update { it.copy(snackbarMessage = "Profile saving is restricted in Guest Mode. Please sign in or register.") }
+            return
+        }
+        if (trimmedName.isEmpty()) {
+            _uiState.update { it.copy(snackbarMessage = "Profile name cannot be empty.") }
+            return
+        }
+
+        _uiState.update { state ->
+            val updatedUser = state.currentUser.copy(
+                name = trimmedName,
+                designation = designation.trim(),
+                phone = phone.trim(),
+                clinicalNotes = if (clinicalNotes.isNotBlank()) clinicalNotes.trim() else state.currentUser.clinicalNotes
+            )
+            val updatedUsers = state.allUsers.map { u ->
+                if (u.id == updatedUser.id) updatedUser else u
+            }
+
+            FirestoreRepository.saveUser(updatedUser)
+
+            val auditLog = AuditLogEntry(
+                id = "audit_${System.currentTimeMillis()}",
+                timestamp = "Just now",
+                actorName = updatedUser.name,
+                actionType = "PROFILE_UPDATE",
+                targetItem = "USER_ACCOUNT",
+                details = "User updated profile information (Name: $trimmedName, Title: ${designation.trim()})."
+            )
+            FirestoreRepository.saveAuditLog(auditLog)
+
+            state.copy(
+                currentUser = updatedUser,
+                allUsers = updatedUsers,
+                snackbarMessage = "Profile updated successfully!",
+                auditLogs = listOf(auditLog) + state.auditLogs
+            )
+        }
+    }
+
+    fun changeCurrentUserPassword(
+        currentPasswordInput: String,
+        newPasswordInput: String,
+        confirmPasswordInput: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val curUser = _uiState.value.currentUser
+        if (curUser.role == UserRole.GUEST) {
+            onResult(false, "Password management is not available in Guest Mode. Please create a permanent account.")
+            return
+        }
+        val curPass = currentPasswordInput.trim()
+        val newPass = newPasswordInput.trim()
+        val confPass = confirmPasswordInput.trim()
+
+        if (curPass.isEmpty()) {
+            onResult(false, "Please enter your current password.")
+            return
+        }
+        if (curUser.password.isNotBlank() && curUser.password != curPass) {
+            onResult(false, "Current password does not match.")
+            return
+        }
+        if (newPass.length < 6) {
+            onResult(false, "New password must be at least 6 characters.")
+            return
+        }
+        if (newPass != confPass) {
+            onResult(false, "New password and confirmation do not match.")
+            return
+        }
+        if (newPass == curPass) {
+            onResult(false, "New password must be different from current password.")
+            return
+        }
+
+        FirebaseAuthRepository.updateUserPassword(
+            newPass = newPass,
+            onSuccess = {
+                val updatedUser = curUser.copy(password = newPass)
+                FirestoreRepository.saveUser(updatedUser)
+
+                val auditLog = AuditLogEntry(
+                    id = "audit_${System.currentTimeMillis()}",
+                    timestamp = "Just now",
+                    actorName = updatedUser.name,
+                    actionType = "PASSWORD_CHANGE",
+                    targetItem = "CREDENTIALS",
+                    details = "User successfully updated account password."
+                )
+                FirestoreRepository.saveAuditLog(auditLog)
+
+                _uiState.update { state ->
+                    val updatedUsers = state.allUsers.map { u ->
+                        if (u.id == updatedUser.id) updatedUser else u
+                    }
+                    state.copy(
+                        currentUser = updatedUser,
+                        allUsers = updatedUsers,
+                        snackbarMessage = "Password changed successfully!",
+                        auditLogs = listOf(auditLog) + state.auditLogs
+                    )
+                }
+                onResult(true, "Password changed successfully!")
+            },
+            onError = { errMsg ->
+                onResult(false, errMsg)
+            }
+        )
+    }
+
     fun logout() {
+        FirebaseAuthRepository.signOut()
         val logoutLog = AuditLogEntry(
             id = "audit_${System.currentTimeMillis()}",
             timestamp = "Just now",
@@ -634,6 +1307,7 @@ class AyurvedaViewModel : ViewModel() {
             targetItem = "SESSION",
             details = "User signed out."
         )
+        FirestoreRepository.saveAuditLog(logoutLog)
         _uiState.update { state ->
             state.copy(
                 isAuthenticated = false,

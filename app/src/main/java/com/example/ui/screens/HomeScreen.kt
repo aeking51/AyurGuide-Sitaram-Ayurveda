@@ -1,12 +1,15 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,17 +19,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,40 +46,52 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AyurvedaMedicine
+import com.example.data.model.DoshaType
+import com.example.data.model.FormulationCategory
+import com.example.data.model.UserRole
 import com.example.ui.AyurvedaUiState
+import com.example.ui.components.GuestLimitedAccessBanner
 import com.example.ui.theme.NaturalBackground
 import com.example.ui.theme.NaturalCardBorder
 import com.example.ui.theme.NaturalCardSurface
 import com.example.ui.theme.NaturalEarthGold
-import com.example.ui.theme.NaturalHydrationBlue
+import com.example.ui.theme.NaturalMossDark
 import com.example.ui.theme.NaturalMossPrimary
 import com.example.ui.theme.NaturalOliveMuted
 import com.example.ui.theme.NaturalParchmentBorder
 import com.example.ui.theme.NaturalParchmentContainer
 import com.example.ui.theme.NaturalPittaGreen
-import com.example.ui.theme.NaturalProgressTrack
 import com.example.ui.theme.NaturalSageBorder
 import com.example.ui.theme.NaturalSageContainer
 import com.example.ui.theme.NaturalTerracotta
 import com.example.ui.theme.NaturalTextHeading
 import com.example.ui.theme.NaturalTextPrimary
+import com.example.ui.theme.NaturalVataViolet
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     uiState: AyurvedaUiState,
-    onLogVitalityDose: () -> Unit,
     onSelectMedicine: (AyurvedaMedicine) -> Unit,
-    onToggleHabit: (String) -> Unit,
-    onToggleDose: (String) -> Unit,
-    onAddHydration: (Float) -> Unit,
-    onNavigateToLibrary: () -> Unit,
-    onNavigateToInsights: () -> Unit,
+    onCategorySelected: (FormulationCategory) -> Unit = {},
+    onNavigateToLibrary: () -> Unit = {},
+    // Optional legacy callbacks maintained for API compatibility
+    onLogVitalityDose: () -> Unit = {},
+    onToggleHabit: (String) -> Unit = {},
+    onToggleDose: (String) -> Unit = {},
+    onAddHydration: (Float) -> Unit = {},
+    onNavigateToInsights: () -> Unit = {},
+    onPromptSignIn: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val featuredMed = uiState.dailyVitalityMedicine
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -75,56 +99,60 @@ fun HomeScreen(
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // 1. Daily Vitality Section (Exact replica of Design HTML layout & styling)
+        // Guest Access Limited Mode Notice
+        if (uiState.currentUser.role == UserRole.GUEST) {
+            item {
+                GuestLimitedAccessBanner(
+                    onSignInClick = onPromptSignIn,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+
+        // 1. Classical Welcome & Heritage Header
         item {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(1.dp, NaturalParchmentBorder, RoundedCornerShape(24.dp))
-                    .clickable { onSelectMedicine(uiState.dailyVitalityMedicine) }
-                    .testTag("vitality_card"),
-                color = NaturalParchmentContainer,
-                shadowElevation = 1.dp
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp)),
+                color = NaturalCardSurface
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Header row: Category & Pill
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
                             Text(
-                                text = "DAILY VITALITY",
-                                fontSize = 10.sp,
+                                text = "SITARAM AYURVEDA PHARMACOPEIA",
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = NaturalEarthGold,
-                                letterSpacing = 1.2.sp
+                                letterSpacing = 1.3.sp,
+                                color = NaturalEarthGold
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = uiState.dailyVitalityMedicine.name,
+                                text = "Therapeutic Index",
                                 fontFamily = FontFamily.Serif,
-                                fontSize = 18.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = NaturalTerracotta
+                                color = NaturalTextHeading
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.5f))
-                                .border(1.dp, NaturalTerracotta.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(NaturalSageContainer)
+                                .border(1.dp, NaturalSageBorder, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(
-                                text = uiState.dailyVitalityMedicine.tagPill,
+                                text = "AFI Formulations",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = NaturalTerracotta,
-                                letterSpacing = 0.5.sp
+                                color = NaturalMossDark
                             )
                         }
                     }
@@ -132,97 +160,214 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = uiState.dailyVitalityMedicine.shortDescription,
-                        fontSize = 11.sp,
-                        color = Color(0xFF7A6A53),
-                        lineHeight = 16.sp
+                        text = "Authentic classical medicine handbook based on Charaka Samhita, Ashtanga Hridaya, and Sahasrayogam standards.",
+                        fontSize = 12.sp,
+                        color = NaturalOliveMuted,
+                        lineHeight = 17.sp
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Constituents tags matching Natural Tones design
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        uiState.dailyVitalityMedicine.constituents.take(2).forEach { tag ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(NaturalSageContainer)
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = tag,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = NaturalMossPrimary
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Bottom row: Dosage and Log button
+                    // Quick Stats Bar
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = NaturalEarthGold.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(0.dp)
-                            )
-                            .padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NaturalBackground)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "🍵", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = uiState.dailyVitalityMedicine.dosage.summary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = NaturalTerracotta
+                                text = "${uiState.allMedicines.size}",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalMossPrimary
+                            )
+                            Text(
+                                text = "Formulations",
+                                fontSize = 9.5.sp,
+                                color = NaturalOliveMuted
                             )
                         }
 
-                        Button(
-                            onClick = onLogVitalityDose,
-                            modifier = Modifier
-                                .height(34.dp)
-                                .testTag("log_dose_button"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (uiState.isDailyVitalityLogged) NaturalPittaGreen else NaturalMossPrimary,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (uiState.isDailyVitalityLogged) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
-                                Text(
-                                    text = if (uiState.isDailyVitalityLogged) "LOGGED" else "LOG DOSE",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(NaturalCardBorder))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${FormulationCategory.values().size - 1}",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalEarthGold
+                            )
+                            Text(
+                                text = "Categories",
+                                fontSize = 9.5.sp,
+                                color = NaturalOliveMuted
+                            )
+                        }
+
+                        Box(modifier = Modifier.width(1.dp).height(24.dp).background(NaturalCardBorder))
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val inStockCount = uiState.allMedicines.count { it.stockUnits > 0 }
+                            Text(
+                                text = "$inStockCount",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalPittaGreen
+                            )
+                            Text(
+                                text = "In Dispensary",
+                                fontSize = 9.5.sp,
+                                color = NaturalOliveMuted
+                            )
                         }
                     }
                 }
             }
         }
 
-        // 2. Health Tracking Section (Matching Design HTML 2-col + span-2 structure)
+        // 2. Featured Classical Formulation Spotlight (Hero Card)
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(1.dp, NaturalParchmentBorder, RoundedCornerShape(24.dp))
+                    .clickable { onSelectMedicine(featuredMed) }
+                    .testTag("featured_spotlight_card"),
+                color = NaturalParchmentContainer,
+                shadowElevation = 2.dp
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    // Header Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "✦ FORMULATION SPOTLIGHT",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.2.sp,
+                                color = NaturalTerracotta
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = featuredMed.sanskritName,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalEarthGold
+                            )
+                            Text(
+                                text = featuredMed.name,
+                                fontFamily = FontFamily.Serif,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalTextHeading
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(NaturalCardSurface)
+                                .border(1.dp, NaturalParchmentBorder, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = featuredMed.category.displayName,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalMossDark
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = featuredMed.shortDescription,
+                        fontSize = 12.5.sp,
+                        color = NaturalTextPrimary.copy(alpha = 0.9f),
+                        lineHeight = 17.5.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Dravyaguna & Classical Ref preview
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NaturalCardSurface.copy(alpha = 0.7f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Dosha: ${featuredMed.doshaImpact.ifBlank { "Tridoshic" }}",
+                            fontSize = 10.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = NaturalOliveMuted
+                        )
+
+                        Text(
+                            text = "Virya: ${featuredMed.dravyaguna.virya}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NaturalMossDark
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Bottom Action Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Packing: ${featuredMed.effectivePacking}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = NaturalOliveMuted
+                        )
+
+                        Button(
+                            onClick = { onSelectMedicine(featuredMed) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NaturalMossPrimary),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .height(38.dp)
+                                .testTag("hero_view_monograph_btn")
+                        ) {
+                            Text(
+                                text = "View Monograph",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Classical Categories Showcase (From Handbook Structure)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -231,252 +376,94 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "HEALTH TRACKING",
+                        text = "EXPLORE BY CLASSICAL CATEGORY",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
-                        color = NaturalOliveMuted,
-                        modifier = Modifier.padding(start = 2.dp)
+                        color = NaturalOliveMuted
                     )
-                    Text(
-                        text = "VIEW INSIGHTS ➜",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NaturalMossPrimary,
-                        modifier = Modifier
-                            .clickable(onClick = onNavigateToInsights)
-                            .padding(4.dp)
-                    )
+
+                    TextButton(
+                        onClick = onNavigateToLibrary,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Full Catalogue",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NaturalMossPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = NaturalMossPrimary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
 
-                // 2 Column Grid: Dosha and Detox (Hydration)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Horizontal Carousel of Major Classical Categories
+                val majorCategories: List<Pair<FormulationCategory, String>> = listOf(
+                    FormulationCategory.ARISHTA to "🍷 Fermented Tonics",
+                    FormulationCategory.KWATHA to "🍵 Classical Decoctions",
+                    FormulationCategory.TAILA to "🌿 Medicated Tailams",
+                    FormulationCategory.GHRITA to "🧈 Medicated Ghee",
+                    FormulationCategory.CHURNA to "🌾 Herbal Choornams",
+                    FormulationCategory.VATI to "💊 Classical Pills",
+                    FormulationCategory.RASAYANA to "🍯 Confections"
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
                 ) {
-                    // Left: Dosha Balance Card
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp))
-                            .clickable(onClick = onNavigateToInsights),
-                        color = NaturalCardSurface,
-                        shadowElevation = 1.dp
-                    ) {
-                        Column(
+                    items(majorCategories) { item ->
+                        val cat = item.first
+                        val desc = item.second
+                        val count = uiState.allMedicines.count { it.category == cat }
+                        Surface(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
+                                .width(150.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, NaturalCardBorder, RoundedCornerShape(16.dp))
+                                .clickable {
+                                    onCategorySelected(cat)
+                                    onNavigateToLibrary()
+                                },
+                            color = NaturalCardSurface
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = "🌿", fontSize = 18.sp)
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = "DOSHA",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NaturalOliveMuted
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                text = "Pitta Balance",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NaturalTextHeading
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Progress bar
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(NaturalProgressTrack)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(uiState.pittaPercent / 100f)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(NaturalPittaGreen)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Text(
-                                text = "${uiState.pittaPercent}% Optimal",
-                                fontSize = 10.sp,
-                                color = NaturalOliveMuted
-                            )
-                        }
-                    }
-
-                    // Right: Detox / Hydration Card with quick incrementer
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp)),
-                        color = NaturalCardSurface,
-                        shadowElevation = 1.dp
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = "💧", fontSize = 18.sp)
-                                Text(
-                                    text = "DETOX",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NaturalOliveMuted
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Hydration Level",
+                                    text = cat.displayName,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = NaturalTextHeading
+                                    color = NaturalTextHeading,
+                                    maxLines = 1
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(NaturalSageContainer)
-                                        .clickable { onAddHydration(0.25f) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Add 250ml",
-                                        tint = NaturalMossPrimary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Progress bar
-                            val progress = (uiState.hydrationLiters / uiState.hydrationTargetLiters).coerceIn(0f, 1f)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(NaturalProgressTrack)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(progress)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(NaturalHydrationBlue)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = desc,
+                                    fontSize = 10.sp,
+                                    color = NaturalOliveMuted,
+                                    maxLines = 1
                                 )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Text(
-                                text = "${uiState.hydrationLiters}L of ${uiState.hydrationTargetLiters}L",
-                                fontSize = 10.sp,
-                                color = NaturalOliveMuted
-                            )
-                        }
-                    }
-                }
-
-                // Span-2 Card (Ritual: Afternoon Pranayama matching HTML design)
-                val primaryHabit = uiState.dailyHabits.firstOrNull()
-                if (primaryHabit != null) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(1.dp, NaturalSageBorder, RoundedCornerShape(20.dp))
-                            .clickable { onToggleHabit(primaryHabit.id) }
-                            .testTag("pranayama_card"),
-                        color = NaturalSageContainer,
-                        shadowElevation = 1.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(Color.White.copy(alpha = 0.45f)),
-                                    contentAlignment = Alignment.Center
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = primaryHabit.iconEmoji, fontSize = 18.sp)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
                                     Text(
-                                        text = primaryHabit.title,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NaturalTextHeading
-                                    )
-                                    Text(
-                                        text = "Scheduled for ${primaryHabit.scheduledTime}",
+                                        text = "$count Items",
                                         fontSize = 10.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = NaturalMossPrimary
+                                        fontWeight = FontWeight.Bold,
+                                        color = NaturalMossDark
                                     )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(if (primaryHabit.isCompleted) NaturalMossPrimary else Color.White.copy(alpha = 0.6f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (primaryHabit.isCompleted) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Completed",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                } else {
                                     Text(
-                                        text = "➜",
-                                        fontSize = 12.sp,
+                                        text = "Explore →",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = NaturalMossPrimary
                                     )
                                 }
@@ -487,82 +474,97 @@ fun HomeScreen(
             }
         }
 
-        // 3. Today's Medicine Routine Checklist
+        // 4. Curated Classical Remedies
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "TODAY'S MEDICINE SCHEDULE",
+                        text = "FEATURED PHARMACOPEIA REMEDIES",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
                         color = NaturalOliveMuted
                     )
+
                     Text(
-                        text = "EXPLORE HERBS",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NaturalMossPrimary,
-                        modifier = Modifier
-                            .clickable(onClick = onNavigateToLibrary)
-                            .padding(4.dp)
+                        text = "${uiState.allMedicines.size} Formulations",
+                        fontSize = 10.5.sp,
+                        color = NaturalOliveMuted
                     )
                 }
 
-                uiState.dailyDoses.forEach { dose ->
+                // Grid/List of Curated Formulations
+                uiState.allMedicines.take(6).forEach { med ->
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(16.dp))
-                            .clickable { onToggleDose(dose.id) },
+                            .clip(RoundedCornerShape(18.dp))
+                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(18.dp))
+                            .clickable { onSelectMedicine(med) }
+                            .testTag("home_medicine_card_${med.id}"),
                         color = NaturalCardSurface
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = dose.iconEmoji, fontSize = 18.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = dose.medicineName,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NaturalTextHeading
-                                    )
-                                    Text(
-                                        text = "${dose.doseLabel} • ${dose.timing}",
-                                        fontSize = 10.sp,
-                                        color = NaturalOliveMuted
-                                    )
-                                }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = med.sanskritName,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalEarthGold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = med.name,
+                                    fontFamily = FontFamily.Serif,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = med.primaryBenefit,
+                                    fontSize = 11.sp,
+                                    color = NaturalOliveMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(if (dose.isLogged) NaturalMossPrimary else NaturalBackground)
-                                    .border(1.dp, if (dose.isLogged) NaturalMossPrimary else NaturalCardBorder, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (dose.isLogged) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Logged",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(NaturalSageContainer)
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = med.category.displayName,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NaturalMossDark
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "View Monograph",
+                                    tint = NaturalMossPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }
@@ -570,43 +572,56 @@ fun HomeScreen(
             }
         }
 
-        // 4. Ayurvedic Wisdom / Ritucharya
+        // 5. Standards & Dispensary Quality Footer Card
         item {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, NaturalParchmentBorder, RoundedCornerShape(20.dp)),
-                color = NaturalParchmentContainer.copy(alpha = 0.6f)
+                    .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp)),
+                color = NaturalCardSurface
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "📜", fontSize = 22.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "RITUCHARYA (SEASONAL HARMONY)",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NaturalEarthGold,
-                            letterSpacing = 1.sp
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(NaturalSageContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = null,
+                            tint = NaturalMossPrimary,
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Sip warm water with a dash of dry ginger to gently rekindle digestive fire (Agni) without aggravating Pitta.",
-                            fontSize = 11.sp,
-                            color = NaturalTerracotta,
-                            lineHeight = 16.sp
+                            text = "Ayurvedic Formulary of India (AFI)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NaturalTextHeading
+                        )
+                        Text(
+                            text = "All medicines prepared strictly as per classical texts with verified botanical parts and authentic Kerala processing.",
+                            fontSize = 10.5.sp,
+                            color = NaturalOliveMuted,
+                            lineHeight = 15.sp
                         )
                     }
                 }
             }
-        }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
         }
     }
 }

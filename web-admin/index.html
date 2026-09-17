@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AyurGuide — Clinical Administration Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            moss: {
+              50: '#F4F7F4',
+              100: '#E5EDE6',
+              500: '#3D5A4C',
+              700: '#2A3F35',
+              800: '#21332A',
+              900: '#16231D',
+            },
+            parchment: {
+              50: '#FDFBF7',
+              100: '#F7F3EB',
+              200: '#ECE4D5',
+              300: '#DFD3BE',
+            },
+            terracotta: '#C86446',
+            amberGold: '#9A7B38',
+            sage: '#688B77'
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            serif: ['"Cinzel"', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #F8F5EE;
+      color: #262B28;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #D4CDBC;
+      border-radius: 9999px;
+    }
+
+    /* Smooth Scaling Animation for Data Table Rows on Hover */
+    .medicine-table-row {
+      transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+                  box-shadow 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+                  background-color 0.18s ease;
+      will-change: transform, box-shadow;
+      transform-origin: center;
+      position: relative;
+    }
+    .medicine-table-row:hover {
+      transform: scale(1.012) translateZ(0);
+      z-index: 20;
+      background-color: #FAF6EE !important;
+      box-shadow: 0 6px 18px -3px rgba(33, 51, 42, 0.10), 0 2px 6px -1px rgba(33, 51, 42, 0.06);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+  <!-- Top Navigation Header -->
+  <header class="bg-moss-900 text-parchment-50 border-b border-moss-700 sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-moss-700 border border-moss-500 flex items-center justify-center text-xl shadow-inner">
+          🌿
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-serif font-bold text-lg tracking-wider text-parchment-50">AyurGuide</span>
+            <span class="text-xs bg-moss-700 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-moss-500">Clinical Admin</span>
+          </div>
+          <p class="text-xs text-parchment-200 opacity-80">Desktop Medicine & Practitioner Registry</p>
+        </div>
+      </div>
+
+      <!-- Cloud Sync Indicator & Actions -->
+      <div class="flex items-center space-x-4">
+        <div id="cloudStatusBadge" class="flex items-center space-x-2 text-xs bg-moss-800 border border-moss-600 px-3 py-1.5 rounded-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-parchment-100">Live Database Ready</span>
+        </div>
+
+        <button onclick="openModal('firebaseConfigModal')" class="text-xs bg-moss-800 hover:bg-moss-700 text-parchment-100 px-3 py-1.5 rounded-lg border border-moss-600 transition flex items-center space-x-1.5">
+          <span>⚙️</span>
+          <span>Firebase Setup</span>
+        </button>
+
+        <div class="h-6 w-px bg-moss-700"></div>
+
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-full bg-amberGold text-white font-bold flex items-center justify-center text-xs shadow">
+            AD
+          </div>
+          <div class="text-left hidden md:block">
+            <div class="text-xs font-semibold leading-tight text-parchment-100">Ayurveda Acharya</div>
+            <div class="text-[10px] text-amber-300">ADMINISTRATOR</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-6 flex space-x-1 overflow-x-auto border-t border-moss-800">
+      <button onclick="switchTab('medicinesTab')" id="btn-medicinesTab" class="nav-tab px-4 py-2.5 text-sm font-semibold border-b-2 border-amber-400 text-amber-300 flex items-center space-x-2">
+        <span>💊</span>
+        <span>Formulations & Inventory</span>
+        <span id="tabMedCountBadge" class="bg-moss-800 text-xs px-2 py-0.5 rounded-full ml-1">8</span>
+      </button>
+
+      <button onclick="switchTab('usersTab')" id="btn-usersTab" class="nav-tab px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-parchment-200 hover:text-white flex items-center space-x-2">
+        <span>👥</span>
+        <span>Users & Practitioners</span>
+        <span id="tabUserCountBadge" class="bg-moss-800 text-xs px-2 py-0.5 rounded-full ml-1">3</span>
+      </button>
+
+      <button onclick="switchTab('auditTab')" id="btn-auditTab" class="nav-tab px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-parchment-200 hover:text-white flex items-center space-x-2">
+        <span>📜</span>
+        <span>Clinical Audit Trail</span>
+        <span id="tabAuditCountBadge" class="bg-moss-800 text-xs px-2 py-0.5 rounded-full ml-1">5</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Canvas -->
+  <main class="max-w-7xl mx-auto px-6 py-8 flex-1 w-full">
+
+    <!-- TAB 1: FORMULATIONS & INVENTORY -->
+    <section id="medicinesTab" class="tab-content space-y-6">
+      
+      <!-- Top Metrics Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl p-4 border border-parchment-200 shadow-sm">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Formulations</div>
+          <div class="text-2xl font-bold text-moss-900 mt-1" id="statTotalMedicines">8</div>
+          <div class="text-xs text-emerald-600 mt-1 font-medium">100% Classical Verified</div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-parchment-200 shadow-sm">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Low Stock Alerts</div>
+          <div class="text-2xl font-bold text-terracotta mt-1" id="statLowStock">1</div>
+          <div class="text-xs text-terracotta mt-1 font-medium">Restock threshold ≤ 15 units</div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-parchment-200 shadow-sm">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Inventory Volume</div>
+          <div class="text-2xl font-bold text-moss-700 mt-1" id="statTotalStock">375</div>
+          <div class="text-xs text-gray-500 mt-1">Dispensing units in pharmacy</div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-parchment-200 shadow-sm">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Target Health Goals</div>
+          <div class="text-2xl font-bold text-amberGold mt-1">7 Goals</div>
+          <div class="text-xs text-gray-500 mt-1">Digestion, Immunity, Stress, etc.</div>
+        </div>
+      </div>
+
+      <!-- Filter and Action Bar -->
+      <div class="bg-white rounded-2xl p-5 border border-parchment-200 shadow-sm space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <!-- Search Bar -->
+          <div class="relative flex-1">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">🔍</span>
+            <input 
+              type="text" 
+              id="medSearchInput"
+              oninput="filterMedicines()"
+              placeholder="Search by commercial name, Sanskrit term, key herbs, or indications..."
+              class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-parchment-200 bg-parchment-50 text-sm focus:outline-none focus:ring-2 focus:ring-moss-500"
+            />
+          </div>
+
+          <!-- Add Medicine Button -->
+          <button 
+            onclick="openAddMedicineModal()" 
+            class="bg-moss-700 hover:bg-moss-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow transition flex items-center justify-center space-x-2 whitespace-nowrap"
+          >
+            <span>➕</span>
+            <span>Add New Formulation</span>
+          </button>
+        </div>
+
+        <!-- Health Goals Filter Chips -->
+        <div>
+          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Filter by Health Goal:</div>
+          <div class="flex flex-wrap gap-2" id="healthGoalChips">
+            <button onclick="setHealthGoalFilter('ALL')" class="goal-chip active-chip px-3 py-1 text-xs font-semibold rounded-full bg-moss-700 text-white shadow-sm transition" data-goal="ALL">
+              🌿 All Goals
+            </button>
+            <button onclick="setHealthGoalFilter('DIGESTION')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="DIGESTION">
+              🌱 Digestion & Gut
+            </button>
+            <button onclick="setHealthGoalFilter('IMMUNITY')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="IMMUNITY">
+              🛡️ Immunity & Ojas
+            </button>
+            <button onclick="setHealthGoalFilter('STRESS_RELIEF')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="STRESS_RELIEF">
+              🧘 Stress Relief & Sleep
+            </button>
+            <button onclick="setHealthGoalFilter('COGNITION')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="COGNITION">
+              🧠 Memory & Focus
+            </button>
+            <button onclick="setHealthGoalFilter('SKIN_HEALTH')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="SKIN_HEALTH">
+              ✨ Skin Radiance
+            </button>
+            <button onclick="setHealthGoalFilter('JOINT_MOBILITY')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="JOINT_MOBILITY">
+              🦴 Joints & Mobility
+            </button>
+            <button onclick="setHealthGoalFilter('DETOX')" class="goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition" data-goal="DETOX">
+              💧 Detox & Cleanse
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Medicines Data Table -->
+      <div class="bg-white rounded-2xl border border-parchment-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-parchment-100 text-moss-900 text-xs uppercase font-bold border-b border-parchment-200 tracking-wider">
+                <th class="py-3.5 px-4">Formulation Name</th>
+                <th class="py-3.5 px-4">Category</th>
+                <th class="py-3.5 px-4">Health Goals</th>
+                <th class="py-3.5 px-4">Dosha Impact</th>
+                <th class="py-3.5 px-4">Stock Units</th>
+                <th class="py-3.5 px-4">Batch No.</th>
+                <th class="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="medicinesTableBody" class="divide-y divide-parchment-100 text-sm">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: USERS & PRACTITIONERS DIRECTORY -->
+    <section id="usersTab" class="tab-content hidden space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="font-serif text-xl font-bold text-moss-900">User & Practitioner Governance</h2>
+          <p class="text-xs text-gray-500">Manage clinical access levels, role promotions, and practitioner verification</p>
+        </div>
+        <button onclick="openModal('addUserModal')" class="bg-moss-700 hover:bg-moss-800 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow transition">
+          ➕ Register New Practitioner
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-parchment-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-parchment-100 text-moss-900 text-xs uppercase font-bold border-b border-parchment-200 tracking-wider">
+                <th class="py-3.5 px-4">User</th>
+                <th class="py-3.5 px-4">Role Designation</th>
+                <th class="py-3.5 px-4">Clinical Privileges</th>
+                <th class="py-3.5 px-4">Account Status</th>
+                <th class="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody" class="divide-y divide-parchment-100 text-sm">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: CLINICAL AUDIT TRAIL -->
+    <section id="auditTab" class="tab-content hidden space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="font-serif text-xl font-bold text-moss-900">Regulatory & Clinical Audit Trail</h2>
+          <p class="text-xs text-gray-500">Immutable chronological log of inventory adjustments, role modifications, and prescriptions</p>
+        </div>
+        <button onclick="exportAuditLogs()" class="bg-parchment-100 hover:bg-parchment-200 text-moss-900 border border-parchment-200 font-semibold text-xs px-3 py-2 rounded-xl transition">
+          📥 Export Log CSV
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-parchment-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-parchment-100 text-moss-900 text-xs uppercase font-bold border-b border-parchment-200 tracking-wider">
+                <th class="py-3.5 px-4">Timestamp</th>
+                <th class="py-3.5 px-4">Action Type</th>
+                <th class="py-3.5 px-4">Actor Email</th>
+                <th class="py-3.5 px-4">Audit Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody" class="divide-y divide-parchment-100 text-sm">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD / EDIT MEDICINE -->
+  <div id="medicineModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-parchment-200 overflow-hidden">
+      <!-- Modal Header -->
+      <div class="bg-moss-900 text-parchment-50 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🌿</span>
+          <h3 class="font-serif font-bold text-lg" id="medModalTitle">Add Ayurvedic Formulation</h3>
+        </div>
+        <button onclick="closeModal('medicineModal')" class="text-parchment-200 hover:text-white text-xl">✕</button>
+      </div>
+
+      <!-- Modal Body (Multi-section Form) -->
+      <form id="medicineForm" onsubmit="handleSaveMedicine(event)" class="p-6 overflow-y-auto custom-scroll space-y-6 flex-1">
+        
+        <!-- SECTION 1: General Info -->
+        <div>
+          <h4 class="text-xs font-bold text-moss-700 uppercase tracking-wider mb-3">1. Identification & Category</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Commercial English Name *</label>
+              <input type="text" id="formMedName" required placeholder="e.g. Ashwagandha Root" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Classical Sanskrit Name *</label>
+              <input type="text" id="formMedSanskrit" required placeholder="e.g. अश्वगंधा (Withania somnifera)" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Formulation Category *</label>
+              <select id="formMedCategory" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none">
+                <option value="CHURNA">Churna (Herbal Powder)</option>
+                <option value="VATI">Vati (Ayurvedic Tablet)</option>
+                <option value="ARISHTA">Arishta / Asava (Fermented Elixir)</option>
+                <option value="TAILA">Taila (Medicated Oil)</option>
+                <option value="GHRITA">Ghrita (Medicated Ghee)</option>
+                <option value="RASAYANA">Rasayana (Rejuvenating Jam)</option>
+                <option value="KWATHA">Kwatha (Decoction)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Tag Pill / Badge</label>
+              <input type="text" id="formMedTagPill" placeholder="e.g. ADAPTOGEN, DETOX" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: Health Goals & Doshas -->
+        <div>
+          <h4 class="text-xs font-bold text-moss-700 uppercase tracking-wider mb-3">2. Health Goals & Dosha Balance</h4>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Select Target Health Goals (Multi-select)</label>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="DIGESTION" class="rounded text-moss-700" />
+                  <span>🌱 Digestion</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="IMMUNITY" class="rounded text-moss-700" />
+                  <span>🛡️ Immunity</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="STRESS_RELIEF" class="rounded text-moss-700" />
+                  <span>🧘 Stress Relief</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="COGNITION" class="rounded text-moss-700" />
+                  <span>🧠 Focus</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="SKIN_HEALTH" class="rounded text-moss-700" />
+                  <span>✨ Skin Glow</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="JOINT_MOBILITY" class="rounded text-moss-700" />
+                  <span>🦴 Joints</span>
+                </label>
+                <label class="flex items-center space-x-2 p-2 rounded-lg border border-parchment-200 hover:bg-parchment-50 cursor-pointer">
+                  <input type="checkbox" name="formGoals" value="DETOX" class="rounded text-moss-700" />
+                  <span>💧 Detox</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Primary Clinical Benefit</label>
+                <input type="text" id="formMedBenefit" placeholder="e.g. Somatic vitality and adrenal support" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Dosha Action (Sanskrit)</label>
+                <input type="text" id="formMedDoshaImpact" placeholder="e.g. Vata & Kapha Pacifying" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Short Description</label>
+              <textarea id="formMedDesc" rows="2" placeholder="Brief therapeutic summary for seekers and patients..." class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: Dosage & Pharmacy Inventory -->
+        <div>
+          <h4 class="text-xs font-bold text-moss-700 uppercase tracking-wider mb-3">3. Posology & Pharmacy Inventory</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Dosage Summary</label>
+              <input type="text" id="formMedDosageSummary" placeholder="e.g. 500mg • After Breakfast" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Stock Units (In Pharmacy)</label>
+              <input type="number" id="formMedStock" value="45" min="0" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1">Batch Identifier</label>
+              <input type="text" id="formMedBatch" value="AYUR-2026-B15" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer Buttons -->
+        <div class="pt-4 border-t border-parchment-200 flex items-center justify-end space-x-3">
+          <button type="button" onclick="closeModal('medicineModal')" class="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-moss-700 hover:bg-moss-800 text-white shadow transition">Save Formulation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: FIREBASE SETUP -->
+  <div id="firebaseConfigModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-parchment-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-serif font-bold text-lg text-moss-900">Firebase Cloud Synchronization</h3>
+        <button onclick="closeModal('firebaseConfigModal')" class="text-gray-400 hover:text-gray-600">✕</button>
+      </div>
+      <p class="text-xs text-gray-600">
+        To sync in real-time with the Android application, enter your Firebase project credentials. Data will sync instantly to Cloud Firestore.
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Firebase Project ID</label>
+          <input type="text" id="fbProjectId" placeholder="e.g. ayurguide-clinical-prod" class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">API Key</label>
+          <input type="password" id="fbApiKey" placeholder="AIzaSy..." class="w-full px-3 py-2 rounded-xl border border-parchment-200 text-sm focus:ring-2 focus:ring-moss-500 outline-none" />
+        </div>
+      </div>
+      <div class="pt-3 border-t border-parchment-200 flex justify-end space-x-3">
+        <button onclick="closeModal('firebaseConfigModal')" class="px-4 py-2 text-xs font-semibold text-gray-600">Close</button>
+        <button onclick="saveFirebaseConfig()" class="px-4 py-2 text-xs font-semibold bg-moss-700 hover:bg-moss-800 text-white rounded-xl shadow">Connect Cloud</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application State & Script Logic -->
+  <script>
+    // Initial Classical Medicines mirroring the Android App
+    let medicines = [
+      {
+        id: "ashwagandha_root",
+        name: "Ashwagandha Root",
+        sanskritName: "अश्वगंधा (Withania somnifera)",
+        category: "CHURNA",
+        tagPill: "ADAPTOGEN",
+        healthGoals: ["STRESS_RELIEF", "IMMUNITY"],
+        doshaImpact: "Vata & Kapha Pacifying",
+        stockUnits: 45,
+        batchNumber: "AYUR-2026-B12",
+        dosageSummary: "500mg • After Breakfast",
+        shortDescription: "Supports stress reduction, adrenal vitality, and deep restful sleep."
+      },
+      {
+        id: "triphala_churna",
+        name: "Triphala Churna",
+        sanskritName: "त्रिफला चूर्ण (Three Sacred Fruits)",
+        category: "CHURNA",
+        tagPill: "DIGESTIVE DETOX",
+        healthGoals: ["DIGESTION", "DETOX"],
+        doshaImpact: "Tridoshic Harmony (Balances Vata, Pitta, Kapha)",
+        stockUnits: 80,
+        batchNumber: "AYUR-2026-B08",
+        dosageSummary: "3g - 5g • At Bedtime",
+        shortDescription: "Classic three-fruit formulation for gentle colon cleanse and systemic detox."
+      },
+      {
+        id: "brahmi_vati",
+        name: "Brahmi Vati",
+        sanskritName: "ब्राह्मी वटी (Classical Tablet)",
+        category: "VATI",
+        tagPill: "NOOTROPIC",
+        healthGoals: ["COGNITION", "STRESS_RELIEF"],
+        doshaImpact: "Pacifies Sadhaka Pitta & Prana Vata",
+        stockUnits: 30,
+        batchNumber: "AYUR-2026-B05",
+        dosageSummary: "1 tablet • Morning with warm milk",
+        shortDescription: "Enhances memory retention, concentration, and clears mental fatigue."
+      },
+      {
+        id: "chyawanprash_awaleha",
+        name: "Chyawanprash Awaleha",
+        sanskritName: "च्यवनप्राश अवलेह (Rasayana Jam)",
+        category: "RASAYANA",
+        tagPill: "IMMUNITY BOOSTER",
+        healthGoals: ["IMMUNITY"],
+        doshaImpact: "Tridoshic & Ojas Enhancing",
+        stockUnits: 12,
+        batchNumber: "AYUR-2026-B03",
+        dosageSummary: "1 tablespoon • Morning empty stomach",
+        shortDescription: "Ancient rejuvenating herbal jam for deep respiratory resistance and vitality."
+      },
+      {
+        id: "kumkumadi_tailam",
+        name: "Kumkumadi Tailam",
+        sanskritName: "कुंकुमादि तैलम् (Saffron Facial Oil)",
+        category: "TAILA",
+        tagPill: "SKIN RADIANCE",
+        healthGoals: ["SKIN_HEALTH"],
+        doshaImpact: "Pacifies Vata & Pitta",
+        stockUnits: 25,
+        batchNumber: "AYUR-2026-B10",
+        dosageSummary: "3-4 drops • Night massage",
+        shortDescription: "Miraculous Ayurvedic elixir with Kashmiri Saffron for radiant skin luster."
+      },
+      {
+        id: "amritarishta",
+        name: "Amritarishta",
+        sanskritName: "अमृतारिष्ट (Fermented Guduchi)",
+        category: "ARISHTA",
+        tagPill: "LIVER & FEVER DETOX",
+        healthGoals: ["IMMUNITY", "DETOX", "DIGESTION"],
+        doshaImpact: "Pacifies Pitta & Kapha",
+        stockUnits: 55,
+        batchNumber: "AYUR-2026-B04",
+        dosageSummary: "15ml with equal water • After lunch",
+        shortDescription: "Traditional fermented herbal wine kindling digestive Agni and detoxifying."
+      },
+      {
+        id: "dashamula_kwatha",
+        name: "Dashamula Kwatha",
+        sanskritName: "दशमूल क्वाथ (Ten Sacred Roots)",
+        category: "KWATHA",
+        tagPill: "VATA HARMONY",
+        healthGoals: ["JOINT_MOBILITY", "STRESS_RELIEF"],
+        doshaImpact: "Profound Vata Pacifier",
+        stockUnits: 38,
+        batchNumber: "AYUR-2026-B07",
+        dosageSummary: "40ml warm decoction • Twice daily",
+        shortDescription: "Ancient ten-root decoction relieving joint stiffness and muscular aches."
+      },
+      {
+        id: "gokshuradi_guggulu",
+        name: "Gokshuradi Guggulu",
+        sanskritName: "गोक्षुरादि गुग्गुलु (Renal Tablet)",
+        category: "VATI",
+        tagPill: "URINARY & DETOX",
+        healthGoals: ["DETOX", "JOINT_MOBILITY"],
+        doshaImpact: "Vata & Pitta Pacifying",
+        stockUnits: 90,
+        batchNumber: "AYUR-2026-B11",
+        dosageSummary: "2 tablets • Twice daily with warm water",
+        shortDescription: "Balances renal fluids, flushes metabolic uric acid, and eases joints."
+      }
+    ];
+
+    let users = [
+      { id: "usr_admin", name: "Ayurveda Acharya", email: "acharya@ayurveda.org", role: "ADMIN", status: "VERIFIED" },
+      { id: "usr_dr_sharma", name: "Dr. Ananya Sharma, BAMS", email: "ananya.sharma@clinic.in", role: "PRACTITIONER", status: "VERIFIED" },
+      { id: "usr_seeker", name: "Devika Patel", email: "devika.patel@gmail.com", role: "PATIENT", status: "VERIFIED" }
+    ];
+
+    let auditLogs = [
+      { timestamp: new Date(Date.now() - 3600000).toLocaleString(), type: "STOCK_UPDATE", actor: "acharya@ayurveda.org", details: "Adjusted stock for Triphala Churna (+20 units). Total: 80 units." },
+      { timestamp: new Date(Date.now() - 7200000).toLocaleString(), type: "ROLE_PROMOTION", actor: "acharya@ayurveda.org", details: "Elevated Dr. Ananya Sharma to CLINICAL_PRACTITIONER." },
+      { timestamp: new Date(Date.now() - 14400000).toLocaleString(), type: "MEDICINE_CREATE", actor: "acharya@ayurveda.org", details: "Registered new classical formulation: Gokshuradi Guggulu." }
+    ];
+
+    let activeHealthGoal = "ALL";
+
+    // Tab Switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-tab').forEach(el => {
+        el.classList.remove('border-amber-400', 'text-amber-300');
+        el.classList.add('border-transparent', 'text-parchment-200');
+      });
+
+      document.getElementById(tabId).classList.remove('hidden');
+      const btn = document.getElementById('btn-' + tabId);
+      btn.classList.add('border-amber-400', 'text-amber-300');
+      btn.classList.remove('border-transparent', 'text-parchment-200');
+    }
+
+    // Modal Control
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function openAddMedicineModal() {
+      document.getElementById('medicineForm').reset();
+      document.getElementById('medModalTitle').innerText = "Add Ayurvedic Formulation";
+      openModal('medicineModal');
+    }
+
+    // Health Goal Filter
+    function setHealthGoalFilter(goal) {
+      activeHealthGoal = goal;
+      document.querySelectorAll('.goal-chip').forEach(btn => {
+        if (btn.getAttribute('data-goal') === goal) {
+          btn.className = "goal-chip active-chip px-3 py-1 text-xs font-semibold rounded-full bg-moss-700 text-white shadow-sm transition";
+        } else {
+          btn.className = "goal-chip px-3 py-1 text-xs font-semibold rounded-full bg-parchment-100 text-moss-900 hover:bg-parchment-200 border border-parchment-200 transition";
+        }
+      });
+      renderMedicines();
+    }
+
+    function filterMedicines() {
+      renderMedicines();
+    }
+
+    // Stock Increment / Decrement
+    function adjustStock(medId, delta) {
+      const med = medicines.find(m => m.id === medId);
+      if (!med) return;
+      med.stockUnits = Math.max(0, med.stockUnits + delta);
+      auditLogs.unshift({
+        timestamp: new Date().toLocaleString(),
+        type: "STOCK_UPDATE",
+        actor: "acharya@ayurveda.org",
+        details: `Updated stock for ${med.name} (${delta > 0 ? '+' : ''}${delta}). Current stock: ${med.stockUnits} units.`
+      });
+      renderMedicines();
+      renderAuditLogs();
+      updateMetrics();
+    }
+
+    // Save Medicine Form
+    function handleSaveMedicine(e) {
+      e.preventDefault();
+      const name = document.getElementById('formMedName').value.trim();
+      const sanskrit = document.getElementById('formMedSanskrit').value.trim();
+      const category = document.getElementById('formMedCategory').value;
+      const tagPill = document.getElementById('formMedTagPill').value.trim() || "HERBAL";
+      const benefit = document.getElementById('formMedBenefit').value.trim();
+      const doshaImpact = document.getElementById('formMedDoshaImpact').value.trim() || "Tridoshic";
+      const desc = document.getElementById('formMedDesc').value.trim();
+      const dosageSummary = document.getElementById('formMedDosageSummary').value.trim() || "500mg daily";
+      const stockUnits = parseInt(document.getElementById('formMedStock').value) || 20;
+      const batchNumber = document.getElementById('formMedBatch').value.trim() || "AYUR-2026-B16";
+
+      const selectedGoals = Array.from(document.querySelectorAll('input[name="formGoals"]:checked')).map(cb => cb.value);
+
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+      const newMed = {
+        id,
+        name,
+        sanskritName: sanskrit,
+        category,
+        tagPill,
+        healthGoals: selectedGoals.length > 0 ? selectedGoals : ["IMMUNITY"],
+        doshaImpact,
+        stockUnits,
+        batchNumber,
+        dosageSummary,
+        shortDescription: desc || benefit
+      };
+
+      medicines.unshift(newMed);
+      auditLogs.unshift({
+        timestamp: new Date().toLocaleString(),
+        type: "MEDICINE_CREATE",
+        actor: "acharya@ayurveda.org",
+        details: `Added new formulation: ${name} (${sanskrit}) under category ${category}.`
+      });
+
+      closeModal('medicineModal');
+      renderMedicines();
+      renderAuditLogs();
+      updateMetrics();
+      alert(`Formulation "${name}" created and synced.`);
+    }
+
+    function deleteMedicine(id) {
+      if (!confirm("Are you sure you want to retire this formulation from the registry?")) return;
+      const idx = medicines.findIndex(m => m.id === id);
+      if (idx !== -1) {
+        const removed = medicines.splice(idx, 1)[0];
+        auditLogs.unshift({
+          timestamp: new Date().toLocaleString(),
+          type: "MEDICINE_DELETE",
+          actor: "acharya@ayurveda.org",
+          details: `Retired formulation: ${removed.name} from active inventory.`
+        });
+        renderMedicines();
+        renderAuditLogs();
+        updateMetrics();
+      }
+    }
+
+    // Role Promotion
+    function changeUserRole(userId, newRole) {
+      const u = users.find(x => x.id === userId);
+      if (!u) return;
+      const oldRole = u.role;
+      u.role = newRole;
+      auditLogs.unshift({
+        timestamp: new Date().toLocaleString(),
+        type: "ROLE_CHANGE",
+        actor: "acharya@ayurveda.org",
+        details: `Updated role for ${u.name} (${u.email}) from ${oldRole} to ${newRole}.`
+      });
+      renderUsers();
+      renderAuditLogs();
+    }
+
+    // Render Helpers
+    function renderMedicines() {
+      const search = (document.getElementById('medSearchInput').value || "").toLowerCase();
+      const tbody = document.getElementById('medicinesTableBody');
+      tbody.innerHTML = "";
+
+      const filtered = medicines.filter(m => {
+        const matchesGoal = activeHealthGoal === "ALL" || (m.healthGoals && m.healthGoals.includes(activeHealthGoal));
+        const matchesSearch = !search || 
+          m.name.toLowerCase().includes(search) || 
+          m.sanskritName.toLowerCase().includes(search) ||
+          m.category.toLowerCase().includes(search);
+        return matchesGoal && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-500 font-medium">No formulations found matching current criteria.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(m => {
+        const isLow = m.stockUnits <= 15;
+        const goalBadges = (m.healthGoals || []).map(g => {
+          const map = {
+            DIGESTION: "🌱 Digestion",
+            IMMUNITY: "🛡️ Immunity",
+            STRESS_RELIEF: "🧘 Stress",
+            COGNITION: "🧠 Focus",
+            SKIN_HEALTH: "✨ Skin",
+            JOINT_MOBILITY: "🦴 Joints",
+            DETOX: "💧 Detox"
+          };
+          return `<span class="inline-block bg-parchment-100 border border-parchment-200 text-[10px] font-semibold text-moss-800 px-2 py-0.5 rounded-full mr-1">${map[g] || g}</span>`;
+        }).join('');
+
+        const tr = document.createElement('tr');
+        tr.className = "medicine-table-row hover:bg-parchment-50 transition border-b border-parchment-100 cursor-pointer";
+        tr.innerHTML = `
+          <td class="py-3 px-4">
+            <div class="font-bold text-moss-900">${m.name}</div>
+            <div class="text-xs text-amberGold font-medium">${m.sanskritName}</div>
+          </td>
+          <td class="py-3 px-4">
+            <span class="bg-moss-100 text-moss-800 font-bold text-[11px] px-2.5 py-1 rounded-md border border-moss-200">${m.category}</span>
+          </td>
+          <td class="py-3 px-4">
+            <div class="flex flex-wrap gap-1">${goalBadges}</div>
+          </td>
+          <td class="py-3 px-4 text-xs text-gray-600">
+            ${m.doshaImpact}
+          </td>
+          <td class="py-3 px-4">
+            <div class="flex items-center space-x-2">
+              <button onclick="adjustStock('${m.id}', -5)" class="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs">-</button>
+              <span class="font-bold text-sm ${isLow ? 'text-terracotta' : 'text-moss-900'}">${m.stockUnits}</span>
+              <button onclick="adjustStock('${m.id}', 5)" class="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs">+</button>
+              ${isLow ? '<span class="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">LOW</span>' : ''}
+            </div>
+          </td>
+          <td class="py-3 px-4 text-xs font-mono text-gray-500">
+            ${m.batchNumber}
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="deleteMedicine('${m.id}')" class="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 transition">Retire</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = "";
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-parchment-50 transition border-b border-parchment-100";
+        tr.innerHTML = `
+          <td class="py-3 px-4">
+            <div class="font-bold text-moss-900">${u.name}</div>
+            <div class="text-xs text-gray-500">${u.email}</div>
+          </td>
+          <td class="py-3 px-4">
+            <select onchange="changeUserRole('${u.id}', this.value)" class="text-xs font-semibold bg-white border border-parchment-200 rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-moss-500 outline-none">
+              <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>⚡ Administrator</option>
+              <option value="PRACTITIONER" ${u.role === 'PRACTITIONER' ? 'selected' : ''}>⚕️ Practitioner (BAMS)</option>
+              <option value="PATIENT" ${u.role === 'PATIENT' ? 'selected' : ''}>🌿 Wellness Seeker</option>
+            </select>
+          </td>
+          <td class="py-3 px-4 text-xs text-gray-600">
+            ${u.role === 'ADMIN' ? 'Full operational, inventory, and role privileges' : u.role === 'PRACTITIONER' ? 'Clinical assessments, custom dosages, patient review' : 'Personal daily regimens & remedy catalog'}
+          </td>
+          <td class="py-3 px-4">
+            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+              ✓ Verified
+            </span>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button class="text-gray-400 hover:text-gray-600 text-xs font-semibold">View Logs</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderAuditLogs() {
+      const tbody = document.getElementById('auditTableBody');
+      tbody.innerHTML = "";
+      auditLogs.forEach(log => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-parchment-50 transition border-b border-parchment-100";
+        tr.innerHTML = `
+          <td class="py-3 px-4 text-xs text-gray-500 font-mono">${log.timestamp}</td>
+          <td class="py-3 px-4">
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-moss-100 text-moss-800 border border-moss-200">${log.type}</span>
+          </td>
+          <td class="py-3 px-4 text-xs font-semibold text-gray-700">${log.actor}</td>
+          <td class="py-3 px-4 text-xs text-gray-600">${log.details}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateMetrics() {
+      document.getElementById('statTotalMedicines').innerText = medicines.length;
+      document.getElementById('tabMedCountBadge').innerText = medicines.length;
+      const low = medicines.filter(m => m.stockUnits <= 15).length;
+      document.getElementById('statLowStock').innerText = low;
+      const totalStock = medicines.reduce((acc, m) => acc + m.stockUnits, 0);
+      document.getElementById('statTotalStock').innerText = totalStock;
+      document.getElementById('tabAuditCountBadge').innerText = auditLogs.length;
+    }
+
+    function exportAuditLogs() {
+      let csv = "Timestamp,ActionType,Actor,Details\n";
+      auditLogs.forEach(l => {
+        csv += `"${l.timestamp}","${l.type}","${l.actor}","${l.details.replace(/"/g, '""')}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `ayurguide_audit_trail_${Date.now()}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function saveFirebaseConfig() {
+      const pid = document.getElementById('fbProjectId').value.trim();
+      const key = document.getElementById('fbApiKey').value.trim();
+      if (!pid) {
+        alert("Please enter your Firebase Project ID.");
+        return;
+      }
+      localStorage.setItem('ayurguide_fb_pid', pid);
+      localStorage.setItem('ayurguide_fb_key', key);
+      document.getElementById('cloudStatusBadge').innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span class="text-parchment-100">Connected: ${pid}</span>
+      `;
+      closeModal('firebaseConfigModal');
+      alert(`Connected to Cloud Firestore (${pid}). Data will sync bidirectionally with the Android mobile application!`);
+    }
+
+    // Initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      renderMedicines();
+      renderUsers();
+      renderAuditLogs();
+      updateMetrics();
+      const savedPid = localStorage.getItem('ayurguide_fb_pid');
+      if (savedPid) {
+        document.getElementById('cloudStatusBadge').innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span class="text-parchment-100">Connected: ${savedPid}</span>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

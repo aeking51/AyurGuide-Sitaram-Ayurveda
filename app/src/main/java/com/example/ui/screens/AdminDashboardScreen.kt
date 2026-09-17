@@ -1,15 +1,24 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,14 +34,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.Inventory2
@@ -40,6 +55,7 @@ import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -53,6 +69,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -107,7 +124,7 @@ enum class AdminTab(val title: String, val icon: String) {
 @Composable
 fun AdminDashboardScreen(
     uiState: AyurvedaUiState,
-    onSwitchUser: (AppUser) -> Unit,
+    onSwitchUser: (AppUser) -> Unit = {},
     onUpdateUserRole: (String, UserRole) -> Unit,
     onUpdateUserStatus: (String, UserStatus) -> Unit,
     onAddNewUser: (AppUser) -> Unit,
@@ -115,13 +132,20 @@ fun AdminDashboardScreen(
     onSelectUserForDetail: (AppUser?) -> Unit,
     onOpenAddMedicineDialog: (Boolean) -> Unit,
     onOpenAddUserDialog: (Boolean) -> Unit,
-    onOpenSwitchUserDialog: (Boolean) -> Unit,
+    onOpenSwitchUserDialog: (Boolean) -> Unit = {},
     onAddNewMedicine: (AyurvedaMedicine) -> Unit,
     onUpdateStock: (String, Int) -> Unit,
     onToggleVitality: (String) -> Unit,
     onDeleteMedicine: (String) -> Unit,
     onSelectMedicine: (AyurvedaMedicine) -> Unit,
     onPrescribeToPatient: (AyurvedaMedicine, String) -> Unit,
+    onUpdateUser: (AppUser) -> Unit = {},
+    onDeleteUser: (String) -> Unit = {},
+    onResetUserPassword: (String) -> Unit = {},
+    onUserSearchQueryChanged: (String) -> Unit = {},
+    onSetUserStatusFilter: (UserStatus?) -> Unit = {},
+    onSetEditingUser: (AppUser?) -> Unit = {},
+    onSetUserPendingDeletion: (AppUser?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentAdminTab by remember { mutableStateOf(AdminTab.OVERVIEW) }
@@ -135,11 +159,12 @@ fun AdminDashboardScreen(
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Admin Banner & Active User Quick Switcher
+        // 1. Admin Banner
         item {
             AdminHeaderCard(
                 currentUser = currentUser,
-                onSwitchProfileClicked = { onOpenSwitchUserDialog(true) }
+                cloudStatus = uiState.cloudSyncStatus,
+                isCloudConnected = uiState.isCloudSyncEnabled
             )
         }
 
@@ -236,63 +261,195 @@ fun AdminDashboardScreen(
 
             AdminTab.USERS -> {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(NaturalCardSurface)
+                            .border(1.dp, NaturalCardBorder, RoundedCornerShape(20.dp))
+                            .padding(16.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "ROLE-BASED USER DIRECTORY",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.3.sp,
-                                color = NaturalOliveMuted
-                            )
-                            Text(
-                                text = "${uiState.allUsers.size} Registered Accounts",
-                                fontSize = 12.sp,
-                                color = NaturalTextPrimary.copy(alpha = 0.7f)
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "USER ACCESS & RBAC DIRECTORY",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.3.sp,
+                                    color = NaturalOliveMuted
+                                )
+                                Text(
+                                    text = "${uiState.allUsers.size} Registered Accounts",
+                                    fontFamily = FontFamily.Serif,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                            }
+
+                            Button(
+                                onClick = { onOpenAddUserDialog(true) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = NaturalMossPrimary,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("admin_add_user_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("+ New User", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
 
-                        Button(
-                            onClick = { onOpenAddUserDialog(true) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NaturalMossPrimary,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("admin_add_user_button")
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("+ New User", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            val adminCount = uiState.allUsers.count { it.role == UserRole.ADMIN }
+                            val doctorCount = uiState.allUsers.count { it.role == UserRole.PRACTITIONER }
+                            val patientCount = uiState.allUsers.count { it.role == UserRole.PATIENT }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NaturalBackground)
+                                    .padding(vertical = 8.dp, horizontal = 10.dp)
+                            ) {
+                                Column {
+                                    Text(text = "⚡ Admins", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalEarthGold)
+                                    Text(text = "$adminCount active", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = NaturalTextHeading)
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NaturalBackground)
+                                    .padding(vertical = 8.dp, horizontal = 10.dp)
+                            ) {
+                                Column {
+                                    Text(text = "⚕️ Vaidyas", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalMossPrimary)
+                                    Text(text = "$doctorCount doctors", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = NaturalTextHeading)
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(NaturalBackground)
+                                    .padding(vertical = 8.dp, horizontal = 10.dp)
+                            ) {
+                                Column {
+                                    Text(text = "🌿 Seekers", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalTerracotta)
+                                    Text(text = "$patientCount patients", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = NaturalTextHeading)
+                                }
+                            }
                         }
                     }
                 }
 
                 item {
-                    RoleFilterRow(
-                        selectedRole = uiState.userRoleFilter,
-                        onSelectRole = onSetUserRoleFilter,
-                        users = uiState.allUsers
+                    UserSearchField(
+                        query = uiState.userSearchQuery,
+                        onQueryChange = onUserSearchQueryChanged
                     )
                 }
 
-                val filteredUsers = uiState.allUsers.filter {
-                    uiState.userRoleFilter == null || it.role == uiState.userRoleFilter
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RoleFilterRow(
+                            selectedRole = uiState.userRoleFilter,
+                            onSelectRole = onSetUserRoleFilter,
+                            users = uiState.allUsers
+                        )
+
+                        StatusFilterRow(
+                            selectedStatus = uiState.userStatusFilter,
+                            onSelectStatus = onSetUserStatusFilter,
+                            users = uiState.allUsers
+                        )
+                    }
                 }
 
-                items(filteredUsers, key = { it.id }) { user ->
-                    AdminUserCard(
-                        user = user,
-                        isCurrentUser = user.id == currentUser.id,
-                        onCardClick = { onSelectUserForDetail(user) },
-                        onSwitchToUser = { onSwitchUser(user) },
-                        onPromoteRole = { newRole -> onUpdateUserRole(user.id, newRole) },
-                        onToggleStatus = { newStatus -> onUpdateUserStatus(user.id, newStatus) }
-                    )
+                val query = uiState.userSearchQuery.trim().lowercase()
+                val filteredUsers = uiState.allUsers.filter { user ->
+                    val matchesRole = uiState.userRoleFilter == null || user.role == uiState.userRoleFilter
+                    val matchesStatus = uiState.userStatusFilter == null || user.status == uiState.userStatusFilter
+                    val matchesQuery = query.isEmpty() ||
+                        user.name.lowercase().contains(query) ||
+                        user.email.lowercase().contains(query) ||
+                        user.phone.lowercase().contains(query) ||
+                        user.designation.lowercase().contains(query) ||
+                        user.clinicalNotes.lowercase().contains(query)
+                    matchesRole && matchesStatus && matchesQuery
+                }
+
+                if (filteredUsers.isEmpty()) {
+                    item {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .border(1.dp, NaturalCardBorder, RoundedCornerShape(18.dp)),
+                            color = NaturalCardSurface
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(text = "🔍", fontSize = 32.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No matching users found",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                                Text(
+                                    text = "Try adjusting your search query or reset the role/status filter criteria.",
+                                    fontSize = 11.sp,
+                                    color = NaturalOliveMuted,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        onUserSearchQueryChanged("")
+                                        onSetUserRoleFilter(null)
+                                        onSetUserStatusFilter(null)
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Reset Filters & Search", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(filteredUsers, key = { it.id }) { user ->
+                        AdminUserCard(
+                            user = user,
+                            isCurrentUser = user.id == currentUser.id,
+                            onCardClick = { onSelectUserForDetail(user) },
+                            onEditUser = { onSetEditingUser(user) },
+                            onDeleteUser = { onSetUserPendingDeletion(user) },
+                            onSwitchToUser = { onSwitchUser(user) },
+                            onPromoteRole = { newRole -> onUpdateUserRole(user.id, newRole) },
+                            onToggleStatus = { newStatus -> onUpdateUserStatus(user.id, newStatus) }
+                        )
+                    }
                 }
             }
 
@@ -326,15 +483,6 @@ fun AdminDashboardScreen(
     }
 
     // Dialogs
-    if (uiState.isSwitchUserDialogOpen) {
-        SwitchUserDialog(
-            currentUserId = currentUser.id,
-            users = uiState.allUsers,
-            onSelectUser = onSwitchUser,
-            onDismiss = { onOpenSwitchUserDialog(false) }
-        )
-    }
-
     if (uiState.isAddMedicineDialogOpen) {
         AddMedicineDialog(
             onDismiss = { onOpenAddMedicineDialog(false) },
@@ -344,6 +492,7 @@ fun AdminDashboardScreen(
 
     if (uiState.isAddUserDialogOpen) {
         AddUserDialog(
+            isChiefAdmin = isChiefAdmin,
             onDismiss = { onOpenAddUserDialog(false) },
             onConfirmAdd = onAddNewUser
         )
@@ -356,9 +505,42 @@ fun AdminDashboardScreen(
             onDismiss = { onSelectUserForDetail(null) },
             onRoleChange = { newRole -> onUpdateUserRole(user.id, newRole) },
             onStatusChange = { newStatus -> onUpdateUserStatus(user.id, newStatus) },
+            onEditProfile = {
+                onSelectUserForDetail(null)
+                onSetEditingUser(user)
+            },
+            onDeleteUser = {
+                onSelectUserForDetail(null)
+                onSetUserPendingDeletion(user)
+            },
+            onResetPassword = {
+                onResetUserPassword(user.id)
+            },
             onSwitchToUser = {
                 onSwitchUser(user)
                 onSelectUserForDetail(null)
+            }
+        )
+    }
+
+    uiState.editingUser?.let { user ->
+        EditUserDialog(
+            user = user,
+            isChiefAdmin = isChiefAdmin,
+            onDismiss = { onSetEditingUser(null) },
+            onConfirmSave = { updated ->
+                onUpdateUser(updated)
+            }
+        )
+    }
+
+    uiState.userPendingDeletion?.let { user ->
+        DeleteUserConfirmDialog(
+            user = user,
+            isCurrentUser = user.id == currentUser.id,
+            onDismiss = { onSetUserPendingDeletion(null) },
+            onConfirmDelete = {
+                onDeleteUser(user.id)
             }
         )
     }
@@ -371,7 +553,8 @@ fun AdminDashboardScreen(
 @Composable
 private fun AdminHeaderCard(
     currentUser: AppUser,
-    onSwitchProfileClicked: () -> Unit,
+    cloudStatus: String = "Cloud Ready",
+    isCloudConnected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -390,7 +573,7 @@ private fun AdminHeaderCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
@@ -401,6 +584,7 @@ private fun AdminHeaderCard(
                                     UserRole.ADMIN -> NaturalTerracotta.copy(alpha = 0.18f)
                                     UserRole.PRACTITIONER -> NaturalSageContainer
                                     UserRole.PATIENT -> NaturalParchmentContainer
+                                    UserRole.GUEST -> NaturalSageContainer.copy(alpha = 0.5f)
                                 }
                             )
                             .border(
@@ -409,6 +593,7 @@ private fun AdminHeaderCard(
                                     UserRole.ADMIN -> NaturalTerracotta
                                     UserRole.PRACTITIONER -> NaturalMossPrimary
                                     UserRole.PATIENT -> NaturalOliveMuted
+                                    UserRole.GUEST -> NaturalMossPrimary
                                 },
                                 CircleShape
                             ),
@@ -442,29 +627,6 @@ private fun AdminHeaderCard(
                         )
                     }
                 }
-
-                // Switch Role / User Button
-                OutlinedButton(
-                    onClick = onSwitchProfileClicked,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = NaturalMossPrimary
-                    ),
-                    modifier = Modifier.testTag("admin_switch_user_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Switch user",
-                        modifier = Modifier.size(14.dp),
-                        tint = NaturalMossPrimary
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Switch",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -485,8 +647,29 @@ private fun AdminHeaderCard(
                         text = "Access: ${currentUser.role.description}",
                         fontSize = 10.sp,
                         color = NaturalTextPrimary.copy(alpha = 0.8f),
-                        lineHeight = 14.sp
+                        lineHeight = 14.sp,
+                        modifier = Modifier.weight(1f)
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isCloudConnected) Color(0xFF2E7D32) else NaturalEarthGold)
+                        )
+                        Text(
+                            text = if (isCloudConnected) "Firestore Online" else "Local / Firestore Ready",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isCloudConnected) Color(0xFF2E7D32) else NaturalEarthGold
+                        )
+                    }
                 }
             }
         }
@@ -510,6 +693,11 @@ fun RoleBadge(role: UserRole) {
             NaturalParchmentContainer,
             NaturalEarthGold,
             NaturalParchmentBorder
+        )
+        UserRole.GUEST -> Triple(
+            NaturalSageContainer.copy(alpha = 0.5f),
+            NaturalMossDark,
+            NaturalSageBorder
         )
     }
 
@@ -903,13 +1091,25 @@ private fun RecentAuditPreviewCard(
                     color = NaturalOliveMuted
                 )
 
-                Text(
-                    text = "View All →",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NaturalMossPrimary,
-                    modifier = Modifier.clickable(onClick = onViewAll)
-                )
+                TextButton(
+                    onClick = onViewAll,
+                    colors = ButtonDefaults.textButtonColors(contentColor = NaturalMossPrimary),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "View All",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NaturalMossPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = NaturalMossPrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -995,14 +1195,29 @@ private fun AdminMedicineCard(
     onCardClick: () -> Unit
 ) {
     val isLowStock = medicine.stockUnits < 15
+    val interactionSource = androidx.compose.runtime.remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isHovered) 1.018f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "admin_med_row_hover_scale"
+    )
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .hoverable(interactionSource)
             .clip(RoundedCornerShape(20.dp))
             .border(
                 1.dp,
-                if (isLowStock) NaturalTerracotta.copy(alpha = 0.4f) else NaturalCardBorder,
+                if (isHovered) NaturalEarthGold.copy(alpha = 0.6f) else if (isLowStock) NaturalTerracotta.copy(alpha = 0.4f) else NaturalCardBorder,
                 RoundedCornerShape(20.dp)
             )
             .clickable(onClick = onCardClick),
@@ -1092,29 +1307,30 @@ private fun AdminMedicineCard(
 
                 // Stepper [-] [+]
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(NaturalCardSurface)
-                            .border(1.dp, NaturalCardBorder, CircleShape)
-                            .clickable { onUpdateStock(-5) },
-                        contentAlignment = Alignment.Center
+                    OutlinedButton(
+                        onClick = { onUpdateStock(-5) },
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NaturalCardBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NaturalTerracotta),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
                     ) {
-                        Text(text = "-5", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalTextHeading)
+                        Text(text = "-5", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(NaturalMossPrimary)
-                            .clickable { onUpdateStock(+10) },
-                        contentAlignment = Alignment.Center
+                    Button(
+                        onClick = { onUpdateStock(+10) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NaturalMossPrimary,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
                     ) {
-                        Text(text = "+10", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "+10", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1137,7 +1353,7 @@ private fun RoleFilterRow(
         FilterChip(
             selected = selectedRole == null,
             onClick = { onSelectRole(null) },
-            label = { Text("All (${users.size})", fontSize = 11.sp) },
+            label = { Text("All Roles (${users.size})", fontSize = 11.sp) },
             colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = NaturalMossPrimary,
                 selectedLabelColor = Color.White
@@ -1160,14 +1376,142 @@ private fun RoleFilterRow(
 }
 
 @Composable
+private fun StatusFilterRow(
+    selectedStatus: UserStatus?,
+    onSelectStatus: (UserStatus?) -> Unit,
+    users: List<AppUser>,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        val allSelected = selectedStatus == null
+        Surface(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .border(
+                    1.dp,
+                    if (allSelected) NaturalMossPrimary else NaturalCardBorder,
+                    RoundedCornerShape(10.dp)
+                )
+                .clickable { onSelectStatus(null) },
+            color = if (allSelected) NaturalSageContainer else NaturalCardSurface
+        ) {
+            Text(
+                text = "All Statuses (${users.size})",
+                fontSize = 10.sp,
+                fontWeight = if (allSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (allSelected) NaturalMossDark else NaturalOliveMuted,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+
+        UserStatus.values().forEach { status ->
+            val isChosen = selectedStatus == status
+            val count = users.count { it.status == status }
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(
+                        1.dp,
+                        if (isChosen) NaturalMossPrimary else NaturalCardBorder,
+                        RoundedCornerShape(10.dp)
+                    )
+                    .clickable { onSelectStatus(if (isChosen) null else status) },
+                color = if (isChosen) NaturalSageContainer else NaturalCardSurface
+            ) {
+                Text(
+                    text = "${status.label} ($count)",
+                    fontSize = 10.sp,
+                    fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isChosen) NaturalMossDark else NaturalOliveMuted,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(NaturalCardSurface)
+            .border(1.dp, NaturalCardBorder, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search Users",
+                tint = NaturalOliveMuted,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(modifier = Modifier.weight(1f)) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "Search users by name, email, phone, notes...",
+                        fontSize = 11.sp,
+                        color = NaturalOliveMuted.copy(alpha = 0.7f)
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 12.sp,
+                        color = NaturalTextHeading,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("user_search_input")
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear search",
+                        tint = NaturalOliveMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AdminUserCard(
     user: AppUser,
     isCurrentUser: Boolean,
     onCardClick: () -> Unit,
-    onSwitchToUser: () -> Unit,
+    onEditUser: () -> Unit,
+    onDeleteUser: () -> Unit,
+    onSwitchToUser: () -> Unit = {},
     onPromoteRole: (UserRole) -> Unit,
     onToggleStatus: (UserStatus) -> Unit
 ) {
+    val isRootAdmin = user.name.contains("Jerin", ignoreCase = true) ||
+        user.email.equals("sys.jerin@gmail.com", ignoreCase = true) ||
+        user.id == "user_admin_jerin"
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1182,6 +1526,7 @@ private fun AdminUserCard(
         color = NaturalCardSurface
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
+            // Header row: Avatar + Name + Role Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1193,16 +1538,28 @@ private fun AdminUserCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
                             .clip(CircleShape)
-                            .background(NaturalSageContainer),
+                            .background(
+                                when (user.role) {
+                                    UserRole.ADMIN -> NaturalEarthGold.copy(alpha = 0.2f)
+                                    UserRole.PRACTITIONER -> NaturalSageContainer
+                                    UserRole.PATIENT -> NaturalTerracotta.copy(alpha = 0.15f)
+                                    UserRole.GUEST -> NaturalSageContainer.copy(alpha = 0.6f)
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = user.name.take(1).uppercase(),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = NaturalMossPrimary
+                            fontSize = 16.sp,
+                            color = when (user.role) {
+                                UserRole.ADMIN -> NaturalEarthGold
+                                UserRole.PRACTITIONER -> NaturalMossPrimary
+                                UserRole.PATIENT -> NaturalTerracotta
+                                UserRole.GUEST -> NaturalMossPrimary
+                            }
                         )
                     }
 
@@ -1227,8 +1584,8 @@ private fun AdminUserCard(
                             }
                         }
                         Text(
-                            text = user.email,
-                            fontSize = 11.sp,
+                            text = "${user.designation} • ${user.email}",
+                            fontSize = 10.sp,
                             color = NaturalOliveMuted
                         )
                     }
@@ -1239,7 +1596,7 @@ private fun AdminUserCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Details line: Prakriti, Adherence, Status
+            // Details strip: Constitution, Adherence, Status, Phone
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1261,43 +1618,106 @@ private fun AdminUserCard(
                         fontWeight = FontWeight.Bold,
                         color = NaturalTextHeading
                     )
+                    if (user.phone.isNotBlank()) {
+                        Text(
+                            text = " • 📞 ${user.phone}",
+                            fontSize = 9.sp,
+                            color = NaturalOliveMuted
+                        )
+                    }
                 }
 
                 StatusBadge(status = user.status)
             }
 
+            if (user.clinicalNotes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "📝 \"${user.clinicalNotes}\"",
+                    fontSize = 10.sp,
+                    color = NaturalOliveMuted,
+                    maxLines = 1
+                )
+            }
+
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Actions row: Quick Login As + Promote Role
+            // Actions row: Edit, Delete, Role & Quick Switcher
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!isCurrentUser) {
+                // Secondary actions: Edit + Delete
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Edit Profile button
                     OutlinedButton(
-                        onClick = onSwitchToUser,
-                        shape = RoundedCornerShape(10.dp),
+                        onClick = onEditUser,
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = NaturalMossPrimary
                         ),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.height(30.dp).testTag("user_edit_${user.id}")
                     ) {
-                        Text("Login as ${user.name.split(" ").first()}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Profile", modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Edit", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Delete button (or protected indicator)
+                    if (isRootAdmin) {
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(NaturalSageContainer.copy(alpha = 0.5f))
+                                .border(1.dp, NaturalEarthGold.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                            color = Color.Transparent
+                        ) {
+                            Text(
+                                text = "🛡️ Protected Admin",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalEarthGold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
+                    } else if (!isCurrentUser) {
+                        OutlinedButton(
+                            onClick = onDeleteUser,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NaturalTerracotta
+                            ),
+                            modifier = Modifier.height(30.dp).testTag("user_delete_${user.id}")
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete User", modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
-                Button(
-                    onClick = onCardClick,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NaturalSageContainer,
-                        contentColor = NaturalMossDark
-                    ),
-                    modifier = Modifier.height(32.dp)
+                // Primary actions: Manage Role & Status
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Manage Role", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = onCardClick,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NaturalSageContainer,
+                            contentColor = NaturalMossDark
+                        ),
+                        modifier = Modifier.height(30.dp).testTag("user_manage_${user.id}")
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Role & Status", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1309,128 +1729,25 @@ private fun AdminUserCard(
 // -------------------------------------------------------------
 
 @Composable
-fun SwitchUserDialog(
-    currentUserId: String,
-    users: List<AppUser>,
-    onSelectUser: (AppUser) -> Unit,
-    onDismiss: () -> Unit,
-    onLogout: (() -> Unit)? = null
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .border(1.dp, NaturalCardBorder, RoundedCornerShape(24.dp)),
-            color = NaturalCardSurface
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "SWITCH USER PROFILE",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.2.sp,
-                            color = NaturalOliveMuted
-                        )
-                        Text(
-                            text = "Test Role-Based Access Control",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NaturalTextHeading
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = NaturalOliveMuted)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                users.forEach { user ->
-                    val isSelected = user.id == currentUserId
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .border(
-                                1.dp,
-                                if (isSelected) NaturalMossPrimary else NaturalCardBorder,
-                                RoundedCornerShape(14.dp)
-                            )
-                            .clickable { onSelectUser(user) },
-                        color = if (isSelected) NaturalSageContainer.copy(alpha = 0.5f) else NaturalBackground
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = user.role.iconEmoji, fontSize = 20.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = user.name,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NaturalTextHeading
-                                    )
-                                    Text(
-                                        text = "${user.role.displayName} • ${user.prakriti.displayName}",
-                                        fontSize = 10.sp,
-                                        color = NaturalOliveMuted
-                                    )
-                                }
-                            }
-
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Current",
-                                    tint = NaturalMossPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (onLogout != null) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedButton(
-                        onClick = onLogout,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = NaturalTerracotta
-                        )
-                    ) {
-                        Text("Log Out of Sanctuary", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun UserDetailRoleDialog(
     user: AppUser,
     isChiefAdmin: Boolean,
     onDismiss: () -> Unit,
     onRoleChange: (UserRole) -> Unit,
     onStatusChange: (UserStatus) -> Unit,
-    onSwitchToUser: () -> Unit
+    onEditProfile: () -> Unit,
+    onDeleteUser: () -> Unit,
+    onResetPassword: () -> Unit,
+    onSwitchToUser: () -> Unit = {}
 ) {
     var selectedRole by remember { mutableStateOf(user.role) }
     var selectedStatus by remember { mutableStateOf(user.status) }
+    var rbacWarning by remember { mutableStateOf<String?>(null) }
+    var passwordResetSuccess by remember { mutableStateOf(false) }
+
+    val isRootAdmin = user.name.contains("Jerin", ignoreCase = true) ||
+        user.email.equals("sys.jerin@gmail.com", ignoreCase = true) ||
+        user.id == "user_admin_jerin"
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1440,7 +1757,11 @@ private fun UserDetailRoleDialog(
                 .border(1.dp, NaturalCardBorder, RoundedCornerShape(24.dp)),
             color = NaturalCardSurface
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1467,19 +1788,75 @@ private fun UserDetailRoleDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // User details strip
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(NaturalBackground)
+                        .padding(10.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "📧 Email: ${user.email}",
+                            fontSize = 11.sp,
+                            color = NaturalTextHeading
+                        )
+                        if (user.phone.isNotBlank()) {
+                            Text(
+                                text = "📞 Phone: ${user.phone}",
+                                fontSize = 11.sp,
+                                color = NaturalTextHeading
+                            )
+                        }
+                        Text(
+                            text = "🏷️ Designation: ${user.designation}",
+                            fontSize = 11.sp,
+                            color = NaturalTextHeading
+                        )
+                        Text(
+                            text = "🌿 Prakriti: ${user.prakriti.symbol} ${user.prakriti.displayName}",
+                            fontSize = 11.sp,
+                            color = NaturalTextHeading
+                        )
+                        if (user.clinicalNotes.isNotBlank()) {
+                            Text(
+                                text = "📝 Notes: ${user.clinicalNotes}",
+                                fontSize = 11.sp,
+                                color = NaturalOliveMuted
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "ASSIGN ROLE:",
+                    text = "ASSIGN APPLICATION ROLE:",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = NaturalOliveMuted
                 )
 
+                if (rbacWarning != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "⚠️ $rbacWarning",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NaturalTerracotta
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(6.dp))
 
                 UserRole.values().forEach { role ->
                     val isChosen = selectedRole == role
+                    val isElevation = role == UserRole.ADMIN || role == UserRole.PRACTITIONER
+                    val canSelect = !isElevation || isChiefAdmin
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1491,10 +1868,15 @@ private fun UserDetailRoleDialog(
                                 RoundedCornerShape(12.dp)
                             )
                             .clickable {
-                                selectedRole = role
-                                onRoleChange(role)
+                                if (isElevation && !isChiefAdmin) {
+                                    rbacWarning = "Only Administrator can elevate a user to Practitioner or Admin."
+                                } else {
+                                    rbacWarning = null
+                                    selectedRole = role
+                                    onRoleChange(role)
+                                }
                             },
-                        color = if (isChosen) NaturalSageContainer else NaturalBackground
+                        color = if (isChosen) NaturalSageContainer else if (!canSelect) NaturalBackground.copy(alpha = 0.5f) else NaturalBackground
                     ) {
                         Row(
                             modifier = Modifier.padding(10.dp),
@@ -1503,12 +1885,23 @@ private fun UserDetailRoleDialog(
                             Text(text = role.iconEmoji, fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = role.displayName,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NaturalTextHeading
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = role.displayName,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NaturalTextHeading
+                                    )
+                                    if (isElevation && !isChiefAdmin) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "🔒 Requires Admin",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NaturalTerracotta
+                                        )
+                                    }
+                                }
                                 Text(
                                     text = role.description,
                                     fontSize = 9.sp,
@@ -1572,16 +1965,56 @@ private fun UserDetailRoleDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Button(
-                    onClick = onSwitchToUser,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NaturalMossPrimary,
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text("Login As This User", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                // CRUD Actions: Edit, Reset Password, Login, Delete
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onEditProfile,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NaturalSageContainer,
+                            contentColor = NaturalMossDark
+                        )
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Edit Full Profile & Details", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onResetPassword()
+                            passwordResetSuccess = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = NaturalMossPrimary
+                        )
+                    ) {
+                        Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (passwordResetSuccess) "Temporary Password Sent! (ayurguide123)" else "Reset User Password",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (!isRootAdmin) {
+                        OutlinedButton(
+                            onClick = onDeleteUser,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NaturalTerracotta
+                            )
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Delete Account from Sanctuary", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -1598,8 +2031,12 @@ private fun AddMedicineDialog(
     var selectedCategory by remember { mutableStateOf(FormulationCategory.CHURNA) }
     var primaryBenefit by remember { mutableStateOf("") }
     var standardDose by remember { mutableStateOf("500mg - 1g with warm water") }
+    var photoUrl by remember { mutableStateOf("") }
+    var packing by remember { mutableStateOf("450 ml") }
+    var classicalReference by remember { mutableStateOf("Ashtamgahrudayam") }
+    var mainIngredientsText by remember { mutableStateOf("") }
+    var usageInstructionsText by remember { mutableStateOf("") }
     var stockUnits by remember { mutableIntStateOf(50) }
-    var categoryExpanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1609,14 +2046,18 @@ private fun AddMedicineDialog(
                 .border(1.dp, NaturalCardBorder, RoundedCornerShape(24.dp)),
             color = NaturalCardSurface
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "NEW CLASSICAL REMEDY",
+                        text = "NEW CLASSICAL PRODUCT",
                         fontFamily = FontFamily.Serif,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -1629,13 +2070,21 @@ private fun AddMedicineDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                AdminInputField(label = "Medicine Name", value = name, onValueChange = { name = it }, placeholder = "e.g. Shatavari Churna")
+                AdminInputField(label = "Product Name *", value = name, onValueChange = { name = it }, placeholder = "e.g. Abhayarishtam")
                 Spacer(modifier = Modifier.height(8.dp))
-                AdminInputField(label = "Sanskrit Name & Botanical", value = sanskritName, onValueChange = { sanskritName = it }, placeholder = "e.g. शतावरी (Asparagus racemosus)")
+                AdminInputField(label = "Sanskrit Name", value = sanskritName, onValueChange = { sanskritName = it }, placeholder = "e.g. अभयारिष्टम्")
                 Spacer(modifier = Modifier.height(8.dp))
-                AdminInputField(label = "Primary Therapeutic Benefit", value = primaryBenefit, onValueChange = { primaryBenefit = it }, placeholder = "e.g. Hormonal balance, nourishing Rasayana")
+                AdminInputField(label = "Product Photo Image URL", value = photoUrl, onValueChange = { photoUrl = it }, placeholder = "https://example.com/product_photo.jpg")
                 Spacer(modifier = Modifier.height(8.dp))
-                AdminInputField(label = "Standard Dosage & Anupana", value = standardDose, onValueChange = { standardDose = it }, placeholder = "e.g. 500mg twice daily with warm milk")
+                AdminInputField(label = "Standard Packing *", value = packing, onValueChange = { packing = it }, placeholder = "e.g. 450 ml or 100 Nos.")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Classical Reference", value = classicalReference, onValueChange = { classicalReference = it }, placeholder = "e.g. Ashtamgahrudayam / Sahasrayogam")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Main Ingredients Text", value = mainIngredientsText, onValueChange = { mainIngredientsText = it }, placeholder = "e.g. Haritaki, Draksha, Vidanga, Dhataki...")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Usage / Dosage Instructions", value = usageInstructionsText, onValueChange = { usageInstructionsText = it }, placeholder = "e.g. 15 to 25 ml twice daily after food")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Primary Therapeutic Benefit / Indications", value = primaryBenefit, onValueChange = { primaryBenefit = it }, placeholder = "e.g. Piles, constipation, digestive disorders")
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -1647,15 +2096,20 @@ private fun AddMedicineDialog(
                                 name = name.trim(),
                                 sanskritName = sanskritName.ifBlank { name }.trim(),
                                 category = selectedCategory,
-                                tagPill = "HERBAL FORMULATION",
+                                tagPill = "CLASSICAL FORMULATION",
                                 shortDescription = primaryBenefit.ifBlank { "Traditional Ayurvedic classical formulation." },
                                 primaryBenefit = primaryBenefit.ifBlank { "Holistic vitality and dosha pacification." },
                                 doshaImpact = "Tridoshic Balancer",
                                 targetDoshas = listOf(DoshaType.TRIDOSHIC),
-                                constituents = listOf("Phytosterols", "Alkaloids", "Saponins"),
+                                photoUrl = photoUrl.trim(),
+                                packing = packing.trim(),
+                                classicalReference = classicalReference.trim(),
+                                mainIngredientsText = mainIngredientsText.trim(),
+                                usageInstructionsText = usageInstructionsText.trim(),
+                                constituents = listOf("Herbal Extractives", "Natural Biotics"),
                                 ingredients = listOf(
                                     AyurvedaIngredient(
-                                        name = name.trim(),
+                                        name = if (mainIngredientsText.isNotBlank()) mainIngredientsText.take(30) else name.trim(),
                                         sanskritName = sanskritName.ifBlank { name }.trim(),
                                         botanicalName = "Botanical Herb",
                                         partUsed = "Classical Herbal Compound",
@@ -1669,13 +2123,13 @@ private fun AddMedicineDialog(
                                     guna = listOf("Guru (Heavy)", "Snigdha (Unctuous)")
                                 ),
                                 dosage = DosageInfo(
-                                    summary = standardDose,
-                                    standardDose = standardDose,
+                                    summary = usageInstructionsText.ifBlank { standardDose },
+                                    standardDose = usageInstructionsText.ifBlank { standardDose },
                                     frequency = "Twice Daily",
                                     timing = "After Meals",
-                                    anupana = "Warm Water or Milk"
+                                    anupana = "Warm Water"
                                 ),
-                                indications = listOf("General debility", "Metabolic harmony"),
+                                indications = if (primaryBenefit.isNotBlank()) listOf(primaryBenefit) else listOf("General debility", "Metabolic harmony"),
                                 contraindications = listOf("Use under Vaidya supervision"),
                                 pathyaWholesome = listOf("Light warm nourishing food"),
                                 apathyaAvoid = listOf("Excessive cold, stale foods"),
@@ -1693,7 +2147,7 @@ private fun AddMedicineDialog(
                         contentColor = Color.White
                     )
                 ) {
-                    Text("Add Formulation to Inventory", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Add Product to Master Catalogue", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1702,14 +2156,17 @@ private fun AddMedicineDialog(
 
 @Composable
 private fun AddUserDialog(
+    isChiefAdmin: Boolean,
     onDismiss: () -> Unit,
     onConfirmAdd: (AppUser) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf(UserRole.PATIENT) }
     var selectedPrakriti by remember { mutableStateOf(DoshaType.PITTA) }
     var designation by remember { mutableStateOf("") }
+    var clinicalNotes by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1719,7 +2176,11 @@ private fun AddUserDialog(
                 .border(1.dp, NaturalCardBorder, RoundedCornerShape(24.dp)),
             color = NaturalCardSurface
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1739,20 +2200,38 @@ private fun AddUserDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                AdminInputField(label = "Full Name", value = name, onValueChange = { name = it }, placeholder = "e.g. Dr. Anand Joshi")
+                AdminInputField(label = "Full Name *", value = name, onValueChange = { name = it }, placeholder = "e.g. Dr. Anand Joshi")
                 Spacer(modifier = Modifier.height(8.dp))
-                AdminInputField(label = "Email Address", value = email, onValueChange = { email = it }, placeholder = "e.g. anand.j@ayurguide.org")
+                AdminInputField(label = "Email Address *", value = email, onValueChange = { email = it }, placeholder = "e.g. anand.j@ayurguide.org")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Phone Number", value = phone, onValueChange = { phone = it }, placeholder = "e.g. +91 98765 43210")
                 Spacer(modifier = Modifier.height(8.dp))
                 AdminInputField(label = "Designation / Title", value = designation, onValueChange = { designation = it }, placeholder = "e.g. Ayurvedic Vaidya / Patient")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Clinical Notes / Specialization", value = clinicalNotes, onValueChange = { clinicalNotes = it }, placeholder = "e.g. Panchakarma specialist / Vata anxiety history")
 
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(text = "ROLE:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
+                if (!isChiefAdmin) {
+                    Text(
+                        text = "🔒 Default role is Wellness Seeker. Only Administrator can assign Practitioner or Admin roles.",
+                        fontSize = 9.sp,
+                        color = NaturalOliveMuted,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    UserRole.values().forEach { role ->
+                    val selectableRoles = if (isChiefAdmin) {
+                        UserRole.values().toList()
+                    } else {
+                        listOf(UserRole.PATIENT)
+                    }
+
+                    selectableRoles.forEach { role ->
                         val isChosen = selectedRole == role
                         Surface(
                             modifier = Modifier
@@ -1774,6 +2253,35 @@ private fun AddUserDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(text = "CONSTITUTION (PRAKRITI):", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(DoshaType.VATA, DoshaType.PITTA, DoshaType.KAPHA, DoshaType.TRIDOSHIC).forEach { dosha ->
+                        val isChosen = selectedPrakriti == dosha
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isChosen) NaturalMossPrimary else NaturalCardBorder, RoundedCornerShape(8.dp))
+                                .clickable { selectedPrakriti = dosha },
+                            color = if (isChosen) NaturalSageContainer else NaturalBackground
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "${dosha.symbol} ${dosha.displayName.take(5)}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
@@ -1783,10 +2291,12 @@ private fun AddUserDialog(
                                 id = "user_${System.currentTimeMillis()}",
                                 name = name.trim(),
                                 email = email.trim(),
+                                phone = phone.trim(),
                                 role = selectedRole,
                                 prakriti = selectedPrakriti,
                                 status = UserStatus.ACTIVE,
-                                designation = designation.ifBlank { selectedRole.displayName },
+                                designation = designation.ifBlank { selectedRole.displayName }.trim(),
+                                clinicalNotes = clinicalNotes.trim(),
                                 registeredDate = "Today",
                                 lastActive = "Just now"
                             )
@@ -1806,6 +2316,291 @@ private fun AddUserDialog(
             }
         }
     }
+}
+
+@Composable
+private fun EditUserDialog(
+    user: AppUser,
+    isChiefAdmin: Boolean,
+    onDismiss: () -> Unit,
+    onConfirmSave: (AppUser) -> Unit
+) {
+    var name by remember { mutableStateOf(user.name) }
+    var email by remember { mutableStateOf(user.email) }
+    var phone by remember { mutableStateOf(user.phone) }
+    var designation by remember { mutableStateOf(user.designation) }
+    var clinicalNotes by remember { mutableStateOf(user.clinicalNotes) }
+    var selectedRole by remember { mutableStateOf(user.role) }
+    var selectedPrakriti by remember { mutableStateOf(user.prakriti) }
+    var selectedStatus by remember { mutableStateOf(user.status) }
+    var rbacWarning by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .border(1.dp, NaturalCardBorder, RoundedCornerShape(24.dp)),
+            color = NaturalCardSurface
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "EDIT USER PROFILE",
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NaturalTextHeading
+                        )
+                        Text(
+                            text = "ID: ${user.id}",
+                            fontSize = 10.sp,
+                            color = NaturalOliveMuted
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = NaturalOliveMuted)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                AdminInputField(label = "Full Name", value = name, onValueChange = { name = it }, placeholder = "Full name")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Email Address", value = email, onValueChange = { email = it }, placeholder = "Email address")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Phone Number", value = phone, onValueChange = { phone = it }, placeholder = "+91 98765 43210")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Designation / Title", value = designation, onValueChange = { designation = it }, placeholder = "e.g. Ayurvedic Vaidya / Seeker")
+                Spacer(modifier = Modifier.height(8.dp))
+                AdminInputField(label = "Clinical Notes / Specialization", value = clinicalNotes, onValueChange = { clinicalNotes = it }, placeholder = "Clinical history, specialty, notes")
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(text = "ROLE ASSIGNMENT:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
+                if (rbacWarning != null) {
+                    Text(text = "⚠️ $rbacWarning", fontSize = 9.sp, color = NaturalTerracotta)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    UserRole.values().forEach { role ->
+                        val isChosen = selectedRole == role
+                        val isElevation = (role == UserRole.ADMIN || role == UserRole.PRACTITIONER) && role != user.role
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isChosen) NaturalMossPrimary else NaturalCardBorder, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    if (isElevation && !isChiefAdmin) {
+                                        rbacWarning = "Only Administrator can elevate a user to Practitioner or Admin."
+                                    } else {
+                                        rbacWarning = null
+                                        selectedRole = role
+                                    }
+                                },
+                            color = if (isChosen) NaturalSageContainer else NaturalBackground
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "${role.iconEmoji} ${role.badgeLabel}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(text = "CONSTITUTION (PRAKRITI):", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(DoshaType.VATA, DoshaType.PITTA, DoshaType.KAPHA, DoshaType.TRIDOSHIC).forEach { dosha ->
+                        val isChosen = selectedPrakriti == dosha
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isChosen) NaturalMossPrimary else NaturalCardBorder, RoundedCornerShape(8.dp))
+                                .clickable { selectedPrakriti = dosha },
+                            color = if (isChosen) NaturalSageContainer else NaturalBackground
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "${dosha.symbol} ${dosha.displayName.take(5)}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(text = "ACCOUNT STATUS:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    UserStatus.values().forEach { status ->
+                        val isChosen = selectedStatus == status
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, if (isChosen) NaturalMossPrimary else NaturalCardBorder, RoundedCornerShape(8.dp))
+                                .clickable { selectedStatus = status },
+                            color = if (isChosen) NaturalSageContainer else NaturalBackground
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = status.label,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NaturalTextHeading
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (name.isNotBlank() && email.isNotBlank()) {
+                            val updatedUser = user.copy(
+                                name = name.trim(),
+                                email = email.trim(),
+                                phone = phone.trim(),
+                                designation = designation.ifBlank { selectedRole.displayName }.trim(),
+                                clinicalNotes = clinicalNotes.trim(),
+                                role = selectedRole,
+                                prakriti = selectedPrakriti,
+                                status = selectedStatus
+                            )
+                            onConfirmSave(updatedUser)
+                        }
+                    },
+                    enabled = name.isNotBlank() && email.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NaturalMossPrimary,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Save User Changes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteUserConfirmDialog(
+    user: AppUser,
+    isCurrentUser: Boolean,
+    onDismiss: () -> Unit,
+    onConfirmDelete: () -> Unit
+) {
+    val isRootAdmin = user.name.contains("Jerin", ignoreCase = true) ||
+        user.email.equals("sys.jerin@gmail.com", ignoreCase = true) ||
+        user.id == "user_admin_jerin"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = if (isRootAdmin || isCurrentUser) NaturalOliveMuted else NaturalTerracotta,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isRootAdmin) "Root Admin Protected" else if (isCurrentUser) "Cannot Delete Self" else "Confirm User Deletion",
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isRootAdmin) {
+                    Text(
+                        text = "User '${user.name}' (${user.email}) is the Root Chief Administrator and cannot be removed under any circumstances.",
+                        fontSize = 12.sp,
+                        color = NaturalTextHeading
+                    )
+                } else if (isCurrentUser) {
+                    Text(
+                        text = "You cannot delete your own logged-in administrator account.",
+                        fontSize = 12.sp,
+                        color = NaturalTextHeading
+                    )
+                } else {
+                    Text(
+                        text = "Are you sure you want to permanently delete '${user.name}' (${user.email})?",
+                        fontSize = 12.sp,
+                        color = NaturalTextHeading,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Role: ${user.role.displayName} • Prakriti: ${user.prakriti.displayName}\nThis action will immediately revoke application access and record an audit log event.",
+                        fontSize = 11.sp,
+                        color = NaturalOliveMuted
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (!isRootAdmin && !isCurrentUser) {
+                Button(
+                    onClick = onConfirmDelete,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NaturalTerracotta,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_delete_user_button")
+                ) {
+                    Text("Delete Account", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(if (isRootAdmin || isCurrentUser) "Close" else "Cancel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = NaturalCardSurface
+    )
 }
 
 @Composable

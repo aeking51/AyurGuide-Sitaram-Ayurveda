@@ -1,6 +1,7 @@
 package com.example.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -14,7 +15,7 @@ val Typography = Typography(
         fontSize = 28.sp,
         lineHeight = 34.sp,
         letterSpacing = 0.sp,
-        color = NaturalTextHeading
+        color = Color.Unspecified
     ),
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Serif,
@@ -22,7 +23,7 @@ val Typography = Typography(
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,
-        color = NaturalTextHeading
+        color = Color.Unspecified
     ),
     headlineSmall = TextStyle(
         fontFamily = FontFamily.Serif,
@@ -30,7 +31,7 @@ val Typography = Typography(
         fontSize = 18.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp,
-        color = NaturalTextHeading
+        color = Color.Unspecified
     ),
     titleLarge = TextStyle(
         fontFamily = FontFamily.Serif,
@@ -38,7 +39,7 @@ val Typography = Typography(
         fontSize = 20.sp,
         lineHeight = 26.sp,
         letterSpacing = 0.sp,
-        color = NaturalTextHeading
+        color = Color.Unspecified
     ),
     titleMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -46,7 +47,7 @@ val Typography = Typography(
         fontSize = 15.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.15.sp,
-        color = NaturalTextHeading
+        color = Color.Unspecified
     ),
     titleSmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -54,7 +55,7 @@ val Typography = Typography(
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.1.sp,
-        color = NaturalOliveMuted
+        color = Color.Unspecified
     ),
     bodyLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -62,7 +63,7 @@ val Typography = Typography(
         fontSize = 15.sp,
         lineHeight = 22.sp,
         letterSpacing = 0.25.sp,
-        color = NaturalTextPrimary
+        color = Color.Unspecified
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -70,7 +71,7 @@ val Typography = Typography(
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.25.sp,
-        color = NaturalTextPrimary
+        color = Color.Unspecified
     ),
     bodySmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -78,7 +79,7 @@ val Typography = Typography(
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.4.sp,
-        color = NaturalOliveMuted
+        color = Color.Unspecified
     ),
     labelLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -86,7 +87,7 @@ val Typography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp,
-        color = NaturalMossPrimary
+        color = Color.Unspecified
     ),
     labelMedium = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -94,7 +95,7 @@ val Typography = Typography(
         fontSize = 10.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.5.sp,
-        color = NaturalOliveMuted
+        color = Color.Unspecified
     ),
     labelSmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -102,6 +103,6 @@ val Typography = Typography(
         fontSize = 9.sp,
         lineHeight = 12.sp,
         letterSpacing = 0.8.sp,
-        color = NaturalOliveMuted
+        color = Color.Unspecified
     )
 )

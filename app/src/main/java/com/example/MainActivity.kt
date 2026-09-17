@@ -21,20 +21,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.UserRole
 import com.example.ui.AppTab
 import com.example.ui.AyurvedaViewModel
 import com.example.ui.components.AyurBottomNav
-import com.example.ui.components.AyurMedicineDetailDialog
 import com.example.ui.components.AyurTopHeader
 import com.example.ui.screens.AdminDashboardScreen
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.AyurvedaMedicineDetailScreen
 import com.example.ui.screens.CatalogueScreen
-import com.example.ui.screens.HealthInsightsScreen
 import com.example.ui.screens.HomeScreen
+import com.example.data.local.ThemePreferences
 import com.example.ui.screens.PrakritiProfileScreen
-import com.example.ui.screens.SwitchUserDialog
+import com.example.ui.theme.AyurTheme
 import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.NaturalBackground
 
 class MainActivity : ComponentActivity() {
 
@@ -42,9 +42,11 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    ThemePreferences.init(this)
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
+      val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+      MyApplicationTheme(themeMode = uiState.appThemeMode) {
         AyurvedaApp(viewModel = viewModel)
       }
     }
@@ -58,6 +60,7 @@ fun AyurvedaApp(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
+  val themeColors = AyurTheme.colors
 
   LaunchedEffect(uiState.snackbarMessage) {
     uiState.snackbarMessage?.let { msg ->
@@ -73,6 +76,7 @@ fun AyurvedaApp(
       onSetAuthMode = { viewModel.setAuthMode(it) },
       onLogin = { email, pass -> viewModel.login(email, pass) },
       onQuickLoginAs = { viewModel.quickLoginAs(it) },
+      onGuestLogin = { viewModel.loginAsGuest() },
       onSignup = { name, email, pass, role, prakriti, desig ->
         viewModel.signup(name, email, pass, role, prakriti, desig)
       },
@@ -85,23 +89,49 @@ fun AyurvedaApp(
     return
   }
 
+  // Show dedicated Medicine Detail Screen (Full Window) when a medicine is selected
+  uiState.selectedMedicine?.let { med ->
+    AyurvedaMedicineDetailScreen(
+      medicine = med,
+      onNavigateBack = { viewModel.selectMedicine(null) },
+      onUpdatePhoto = if (uiState.currentUser.role != UserRole.GUEST) {
+        { newUrl -> viewModel.updateMedicinePhoto(med.id, newUrl) }
+      } else null,
+      modifier = modifier
+    )
+    return
+  }
+
   Scaffold(
     modifier = modifier
       .fillMaxSize()
-      .background(NaturalBackground),
-    containerColor = NaturalBackground,
+      .background(themeColors.background),
+    containerColor = themeColors.background,
     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     topBar = {
       AyurTopHeader(
         userName = uiState.currentUser.name.split(" ").firstOrNull() ?: uiState.currentUser.name,
         userRole = uiState.currentUser.role,
-        onProfileClick = { viewModel.setSwitchUserDialogOpen(true) },
+        onProfileClick = { viewModel.setTab(AppTab.PROFILE) },
         searchQuery = uiState.searchQuery,
         onSearchQueryChanged = { query ->
           viewModel.onSearchQueryChanged(query)
           if (query.isNotEmpty() && uiState.currentTab != AppTab.LIBRARY && uiState.currentTab != AppTab.ADMIN) {
             viewModel.setTab(AppTab.LIBRARY)
           }
+        },
+        searchHistory = uiState.searchHistory,
+        onSearchSubmitted = { query ->
+          viewModel.performSearch(query)
+          if (uiState.currentTab != AppTab.LIBRARY) {
+            viewModel.setTab(AppTab.LIBRARY)
+          }
+        },
+        onRemoveSearchHistoryItem = { query ->
+          viewModel.removeSearchQueryFromHistory(query)
+        },
+        onClearSearchHistory = {
+          viewModel.clearSearchHistory()
         }
       )
     },
@@ -121,13 +151,13 @@ fun AyurvedaApp(
       when (uiState.currentTab) {
         AppTab.HOME -> HomeScreen(
           uiState = uiState,
-          onLogVitalityDose = { viewModel.logDailyVitalityDose() },
           onSelectMedicine = { viewModel.selectMedicine(it) },
-          onToggleHabit = { viewModel.toggleHabit(it) },
-          onToggleDose = { viewModel.toggleDose(it) },
-          onAddHydration = { viewModel.addHydration(it) },
+          onCategorySelected = { cat ->
+            viewModel.onCategorySelected(cat)
+            viewModel.setTab(AppTab.LIBRARY)
+          },
           onNavigateToLibrary = { viewModel.setTab(AppTab.LIBRARY) },
-          onNavigateToInsights = { viewModel.setTab(AppTab.INSIGHTS) }
+          onPromptSignIn = { viewModel.logout() }
         )
 
         AppTab.LIBRARY -> CatalogueScreen(
@@ -135,29 +165,41 @@ fun AyurvedaApp(
           onCategorySelected = { viewModel.onCategorySelected(it) },
           onDoshaSelected = { viewModel.onDoshaSelected(it) },
           onSelectMedicine = { viewModel.selectMedicine(it) },
-          onAddToRoutine = { viewModel.addMedicineToDailyRoutine(it) },
-          onRefresh = { viewModel.refreshCatalogue() }
+          onRefresh = { viewModel.refreshCatalogue() },
+          onSearchSubmitted = { query -> viewModel.performSearch(query) },
+          onRemoveSearchHistoryItem = { query -> viewModel.removeSearchQueryFromHistory(query) },
+          onClearSearchHistory = { viewModel.clearSearchHistory() }
         )
 
-        AppTab.INSIGHTS -> HealthInsightsScreen(
-          uiState = uiState,
-          onUpdateDosha = { dosha, value -> viewModel.updateDoshaLevel(dosha, value) },
-          onAddHydration = { viewModel.addHydration(it) },
-          onToggleHabit = { viewModel.toggleHabit(it) },
-          onToggleDose = { viewModel.toggleDose(it) }
-        )
+        AppTab.INSIGHTS -> {
+          // Health tracking tab removed; default to Catalogue
+          CatalogueScreen(
+            uiState = uiState,
+            onCategorySelected = { viewModel.onCategorySelected(it) },
+            onDoshaSelected = { viewModel.onDoshaSelected(it) },
+            onSelectMedicine = { viewModel.selectMedicine(it) },
+            onRefresh = { viewModel.refreshCatalogue() },
+            onSearchSubmitted = { query -> viewModel.performSearch(query) },
+            onRemoveSearchHistoryItem = { query -> viewModel.removeSearchQueryFromHistory(query) },
+            onClearSearchHistory = { viewModel.clearSearchHistory() }
+          )
+        }
 
         AppTab.PROFILE -> PrakritiProfileScreen(
           uiState = uiState,
-          onAnswerQuestion = { qId, dosha -> viewModel.answerPrakriti(qId, dosha) },
-          onSwitchUserClicked = { viewModel.setSwitchUserDialogOpen(true) },
           onNavigateToAdmin = { viewModel.setTab(AppTab.ADMIN) },
-          onLogout = { viewModel.logout() }
+          onLogout = { viewModel.logout() },
+          onUpdateProfile = { name, desig, phone, notes ->
+            viewModel.updateCurrentUserProfile(name, desig, phone, notes)
+          },
+          onChangePassword = { currentPass, newPass, confirmPass, callback ->
+            viewModel.changeCurrentUserPassword(currentPass, newPass, confirmPass, callback)
+          },
+          onThemeSelected = { viewModel.setAppThemeMode(it) }
         )
 
         AppTab.ADMIN -> AdminDashboardScreen(
           uiState = uiState,
-          onSwitchUser = { viewModel.switchUser(it) },
           onUpdateUserRole = { id, role -> viewModel.updateUserRole(id, role) },
           onUpdateUserStatus = { id, status -> viewModel.updateUserStatus(id, status) },
           onAddNewUser = { viewModel.addNewUser(it) },
@@ -165,7 +207,6 @@ fun AyurvedaApp(
           onSelectUserForDetail = { viewModel.selectUserForDetail(it) },
           onOpenAddMedicineDialog = { viewModel.setAddMedicineDialogOpen(it) },
           onOpenAddUserDialog = { viewModel.setAddUserDialogOpen(it) },
-          onOpenSwitchUserDialog = { viewModel.setSwitchUserDialogOpen(it) },
           onAddNewMedicine = { viewModel.addNewMedicine(it) },
           onUpdateStock = { id, stock -> viewModel.updateMedicineStock(id, stock) },
           onToggleVitality = { viewModel.toggleMedicineVitality(it) },
@@ -175,29 +216,6 @@ fun AyurvedaApp(
         )
       }
     }
-  }
-
-  // Global Switch User Dialog
-  if (uiState.isSwitchUserDialogOpen) {
-    SwitchUserDialog(
-      currentUserId = uiState.currentUser.id,
-      users = uiState.allUsers,
-      onSelectUser = { viewModel.switchUser(it) },
-      onDismiss = { viewModel.setSwitchUserDialogOpen(false) },
-      onLogout = {
-        viewModel.setSwitchUserDialogOpen(false)
-        viewModel.logout()
-      }
-    )
-  }
-
-  // Detailed Modal Dialog when a medicine is selected
-  uiState.selectedMedicine?.let { med ->
-    AyurMedicineDetailDialog(
-      medicine = med,
-      onDismiss = { viewModel.selectMedicine(null) },
-      onAddToRoutine = { viewModel.addMedicineToDailyRoutine(it) }
-    )
   }
 }
 

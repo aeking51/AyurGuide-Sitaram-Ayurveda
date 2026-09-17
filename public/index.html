@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sitaram Ayurveda — Therapeutic Index Admin Website</title>
+  
+  <!-- Primary Meta Tags -->
+  <meta name="title" content="Sitaram Ayurveda Medicine Catalogue Admin Portal">
+  <meta name="description" content="Central administrative website for managing classical Ayurvedic formulations, categories, packings, ingredients and clinical indications based on the Therapeutic Index Handbook.">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ayur: {
+              forest: '#0F382C',
+              green: '#1B4D3E',
+              emerald: '#2C6E49',
+              gold: '#DFB15B',
+              bronze: '#9A7B38',
+              cream: '#F9F7F2',
+              sand: '#F4EFE6',
+              border: '#E2D9CC'
+            }
+          },
+          fontFamily: {
+            serif: ['Playfair Display', 'Cinzel', 'Georgia', 'serif'],
+            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Playfair Display + Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Custom refined scrollbars */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.03);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(27, 77, 62, 0.2);
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(27, 77, 62, 0.4);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+
+    /* Smooth Scaling Animation for Medicine Data Table Rows on Hover */
+    .medicine-table-row {
+      transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+                  box-shadow 0.22s cubic-bezier(0.2, 0.9, 0.3, 1),
+                  background-color 0.18s ease;
+      will-change: transform, box-shadow;
+      transform-origin: center;
+      position: relative;
+    }
+    .medicine-table-row:hover {
+      transform: scale(1.012) translateZ(0);
+      z-index: 20;
+      background-color: #FAF6EE !important;
+      box-shadow: 0 6px 18px -3px rgba(15, 56, 44, 0.10), 0 2px 6px -1px rgba(15, 56, 44, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-[#F9F7F2] text-[#1A2E26] font-sans selection:bg-[#DFB15B]/30 selection:text-[#0F382C]">
+
+  <!-- Main Root Container -->
+  <div id="app-root"></div>
+
+  <!-- Application Modules -->
+  <script src="/js/auth.js"></script>
+  <script src="/js/views.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script src="/js/app.js"></script>
+
+</body>
+</html>

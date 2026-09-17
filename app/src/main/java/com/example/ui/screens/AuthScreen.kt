@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +89,7 @@ fun AuthScreen(
     onSetAuthMode: (AuthMode) -> Unit,
     onLogin: (String, String) -> Unit,
     onQuickLoginAs: (AppUser) -> Unit,
+    onGuestLogin: () -> Unit = {},
     onSignup: (String, String, String, UserRole, DoshaType, String) -> Unit,
     onRequestReset: (String) -> Unit,
     onCompleteReset: (String, String, String) -> Unit,
@@ -158,6 +162,7 @@ fun AuthScreen(
                             allUsers = uiState.allUsers,
                             onLogin = onLogin,
                             onQuickLoginAs = onQuickLoginAs,
+                            onGuestLogin = onGuestLogin,
                             onSwitchToSignup = { onSetAuthMode(AuthMode.SIGNUP) },
                             onSwitchToForgotPassword = { onSetAuthMode(AuthMode.FORGOT_PASSWORD) }
                         )
@@ -221,21 +226,25 @@ private fun AuthHeaderSection(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackToLogin) {
+                TextButton(
+                    onClick = onBackToLogin,
+                    colors = ButtonDefaults.textButtonColors(contentColor = NaturalMossPrimary),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back to Login",
-                        tint = NaturalMossDark
+                        tint = NaturalMossDark,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Back to Sign In",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NaturalMossPrimary
                     )
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Back to Sign In",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NaturalMossPrimary,
-                    modifier = Modifier.clickable(onClick = onBackToLogin)
-                )
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -291,6 +300,7 @@ private fun LoginFormContent(
     allUsers: List<AppUser>,
     onLogin: (String, String) -> Unit,
     onQuickLoginAs: (AppUser) -> Unit,
+    onGuestLogin: () -> Unit = {},
     onSwitchToSignup: () -> Unit,
     onSwitchToForgotPassword: () -> Unit
 ) {
@@ -380,15 +390,19 @@ private fun LoginFormContent(
                 color = NaturalOliveMuted
             )
 
-            Text(
-                text = "Forgot Password?",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = NaturalMossPrimary,
-                modifier = Modifier
-                    .clickable(onClick = onSwitchToForgotPassword)
-                    .testTag("login_forgot_password_btn")
-            )
+            TextButton(
+                onClick = onSwitchToForgotPassword,
+                colors = ButtonDefaults.textButtonColors(contentColor = NaturalMossPrimary),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier.testTag("login_forgot_password_btn")
+            ) {
+                Text(
+                    text = "Forgot Password?",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NaturalMossPrimary
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -463,80 +477,178 @@ private fun LoginFormContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
-        // Fast Demo Role-Based Login Options
-        Column(
+        // Divider
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(NaturalCardBorder)
+            )
+            Text(
+                text = "OR CONTINUE WITHOUT ACCOUNT",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = NaturalOliveMuted,
+                letterSpacing = 1.1.sp,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(NaturalCardBorder)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Guest Access Card with Limited Access Clarifications
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(NaturalBackground)
-                .border(1.dp, NaturalCardBorder, RoundedCornerShape(16.dp))
-                .padding(14.dp)
+                .border(1.2.dp, NaturalSageBorder, RoundedCornerShape(16.dp))
+                .testTag("guest_access_container"),
+            color = NaturalSageContainer.copy(alpha = 0.55f)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "ONE-TAP DEMO ACCOUNTS",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    color = NaturalOliveMuted
-                )
-                Text(
-                    text = "Test RBAC",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NaturalEarthGold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Demo Login items
-            allUsers.take(3).forEach { user ->
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onQuickLoginAs(user) }
-                        .testTag("quick_login_${user.role.name.lowercase()}"),
-                    color = NaturalCardSurface
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(NaturalMossPrimary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
                     ) {
+                        Text(text = "🍃", fontSize = 17.sp)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = user.role.iconEmoji, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
+                            Text(
+                                text = "Guest Access",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalTextHeading
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(NaturalEarthGold.copy(alpha = 0.2f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
                                 Text(
-                                    text = user.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NaturalTextHeading
-                                )
-                                Text(
-                                    text = "${user.role.badgeLabel} • ${user.email}",
-                                    fontSize = 9.sp,
-                                    color = NaturalOliveMuted
+                                    text = "LIMITED ACCESS",
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NaturalEarthGold,
+                                    letterSpacing = 0.5.sp
                                 )
                             }
                         }
-
                         Text(
-                            text = "Login →",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NaturalMossPrimary
+                            text = "Explore classical herbs & remedies immediately",
+                            fontSize = 10.5.sp,
+                            color = NaturalOliveMuted
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Permissions Comparison Row (Included vs Restricted)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Included
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(NaturalBackground)
+                            .border(0.8.dp, NaturalCardBorder, RoundedCornerShape(10.dp))
+                            .padding(8.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "✓ INCLUDED",
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalMossDark,
+                                letterSpacing = 0.8.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Classical Formulations\n• Dosha Indications\n• Botanical Monograph",
+                                fontSize = 9.5.sp,
+                                color = NaturalTextPrimary.copy(alpha = 0.85f),
+                                lineHeight = 13.5.sp
+                            )
+                        }
+                    }
+
+                    // Restricted
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(NaturalBackground)
+                            .border(0.8.dp, NaturalCardBorder, RoundedCornerShape(10.dp))
+                            .padding(8.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "🔒 RESTRICTED",
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NaturalTerracotta,
+                                letterSpacing = 0.8.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Clinical Consults\n• Admin Dashboard\n• Personal Regimens",
+                                fontSize = 9.5.sp,
+                                color = NaturalTextPrimary.copy(alpha = 0.85f),
+                                lineHeight = 13.5.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = onGuestLogin,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .testTag("auth_guest_login_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.2.dp, NaturalMossPrimary),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = NaturalBackground,
+                        contentColor = NaturalMossDark
+                    )
+                ) {
+                    Text(
+                        text = "Continue as Guest",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.4.sp
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "→", fontSize = 13.sp)
                 }
             }
         }
@@ -557,7 +669,6 @@ private fun SignupFormContent(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var selectedRole by remember { mutableStateOf(UserRole.PATIENT) }
     var selectedPrakriti by remember { mutableStateOf(DoshaType.PITTA) }
     var designation by remember { mutableStateOf("") }
     var termsAgreed by remember { mutableStateOf(true) }
@@ -681,40 +792,46 @@ private fun SignupFormContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Role Selector
-        Text(text = "SELECT YOUR APPLICATION ROLE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NaturalOliveMuted)
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        // Default Account Role: Wellness Seeker
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.dp, NaturalCardBorder, RoundedCornerShape(12.dp)),
+            color = NaturalBackground
         ) {
-            UserRole.values().forEach { role ->
-                val isSelected = selectedRole == role
-                Surface(
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .border(
-                            1.dp,
-                            if (isSelected) NaturalMossPrimary else NaturalCardBorder,
-                            RoundedCornerShape(10.dp)
-                        )
-                        .clickable { selectedRole = role },
-                    color = if (isSelected) NaturalSageContainer else NaturalBackground
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(NaturalSageContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(text = role.iconEmoji, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(2.dp))
+                    Text(text = "🧘", fontSize = 18.sp)
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = role.badgeLabel,
-                            fontSize = 9.sp,
+                            text = "Account Role: Wellness Seeker",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = NaturalTextHeading
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        RoleBadge(role = UserRole.PATIENT)
                     }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "New accounts default to Wellness Seeker. Practitioner & Admin access is designated by Sanctuary Admin.",
+                        fontSize = 9.sp,
+                        color = NaturalOliveMuted,
+                        lineHeight = 13.sp
+                    )
                 }
             }
         }
@@ -768,7 +885,7 @@ private fun SignupFormContent(
         AuthInputField(
             value = designation,
             onValueChange = { designation = it },
-            placeholder = if (selectedRole == UserRole.PRACTITIONER) "e.g. BAMS, Ayurvedic Clinic" else "e.g. Wellness Seeker",
+            placeholder = "e.g. Wellness Seeker / Holistic Lifestyle",
             testTag = "signup_designation_input"
         )
 
@@ -801,7 +918,7 @@ private fun SignupFormContent(
         val canSubmit = name.isNotBlank() && email.isNotBlank() && password.isNotBlank() && password == confirmPassword && termsAgreed
         Button(
             onClick = {
-                onSignup(name, email, password, selectedRole, selectedPrakriti, designation)
+                onSignup(name, email, password, UserRole.PATIENT, selectedPrakriti, designation)
             },
             enabled = canSubmit,
             modifier = Modifier
@@ -1082,21 +1199,33 @@ private fun ResetPasswordVerifyContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Resend Code",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = NaturalMossPrimary,
-                modifier = Modifier.clickable(onClick = onResendOtp)
-            )
+            OutlinedButton(
+                onClick = onResendOtp,
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NaturalSageBorder),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = NaturalMossPrimary),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Text(
+                    text = "Resend Code",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-            Text(
-                text = "Back to Sign In",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = NaturalOliveMuted,
-                modifier = Modifier.clickable(onClick = onBackToLogin)
-            )
+            TextButton(
+                onClick = onBackToLogin,
+                colors = ButtonDefaults.textButtonColors(contentColor = NaturalOliveMuted),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Text(
+                    text = "Back to Sign In",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }

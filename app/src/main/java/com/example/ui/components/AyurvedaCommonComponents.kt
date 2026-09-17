@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,13 +18,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material3.Button
@@ -31,6 +37,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +49,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -50,6 +59,7 @@ import com.example.data.model.AppUser
 import com.example.data.model.AyurvedaMedicine
 import com.example.data.model.UserRole
 import com.example.ui.AppTab
+import com.example.ui.theme.AyurTheme
 import com.example.ui.theme.NaturalBackground
 import com.example.ui.theme.NaturalCardBorder
 import com.example.ui.theme.NaturalCardSurface
@@ -72,8 +82,14 @@ fun AyurTopHeader(
     onProfileClick: () -> Unit = {},
     searchQuery: String,
     onSearchQueryChanged: (String) -> Unit,
+    searchHistory: List<String> = emptyList(),
+    onSearchSubmitted: (String) -> Unit = {},
+    onRemoveSearchHistoryItem: (String) -> Unit = {},
+    onClearSearchHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val theme = AyurTheme.colors
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -87,14 +103,16 @@ fun AyurTopHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "NAMASTE, ${userName.uppercase()}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.4.sp,
-                        color = NaturalOliveMuted
+                        color = theme.mutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
@@ -102,9 +120,10 @@ fun AyurTopHeader(
                             .clip(RoundedCornerShape(6.dp))
                             .background(
                                 when (userRole) {
-                                    UserRole.ADMIN -> NaturalTerracotta.copy(alpha = 0.15f)
-                                    UserRole.PRACTITIONER -> NaturalSageContainer
-                                    UserRole.PATIENT -> NaturalParchmentContainer
+                                    UserRole.ADMIN -> theme.terracotta.copy(alpha = 0.15f)
+                                    UserRole.PRACTITIONER -> theme.sageContainer
+                                    UserRole.PATIENT -> theme.parchmentContainer
+                                    UserRole.GUEST -> theme.sageContainer.copy(alpha = 0.7f)
                                 }
                             )
                             .clickable(onClick = onProfileClick)
@@ -115,9 +134,10 @@ fun AyurTopHeader(
                             fontSize = 8.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = when (userRole) {
-                                UserRole.ADMIN -> NaturalTerracotta
-                                UserRole.PRACTITIONER -> NaturalMossDark
-                                UserRole.PATIENT -> NaturalEarthGold
+                                UserRole.ADMIN -> theme.terracotta
+                                UserRole.PRACTITIONER -> theme.primaryBrandDark
+                                UserRole.PATIENT -> theme.earthGold
+                                UserRole.GUEST -> theme.primaryBrand
                             }
                         )
                     }
@@ -128,17 +148,21 @@ fun AyurTopHeader(
                     fontFamily = FontFamily.Serif,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = NaturalTextHeading
+                    color = theme.headingText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             // Avatar circle matching Natural Tones design
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(NaturalSageContainer)
-                    .border(2.dp, Color.White, CircleShape)
+                    .background(theme.sageContainer)
+                    .border(2.dp, theme.cardBorder, CircleShape)
                     .clickable(onClick = onProfileClick)
                     .testTag("top_header_avatar"),
                 contentAlignment = Alignment.Center
@@ -147,7 +171,7 @@ fun AyurTopHeader(
                     text = userName.take(1).uppercase(),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
-                    color = NaturalMossPrimary
+                    color = theme.primaryBrand
                 )
             }
         }
@@ -157,8 +181,8 @@ fun AyurTopHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(NaturalCardSurface)
-                .border(1.dp, NaturalCardBorder, RoundedCornerShape(16.dp))
+                .background(theme.cardBg)
+                .border(1.dp, theme.cardBorder, RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -169,7 +193,7 @@ fun AyurTopHeader(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
-                    tint = NaturalOliveMuted,
+                    tint = theme.mutedText,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -178,16 +202,18 @@ fun AyurTopHeader(
                         Text(
                             text = "Search herbs, remedies, doshas...",
                             fontSize = 13.sp,
-                            color = NaturalOliveMuted.copy(alpha = 0.7f)
+                            color = theme.mutedText.copy(alpha = 0.7f)
                         )
                     }
                     BasicTextField(
                         value = searchQuery,
                         onValueChange = onSearchQueryChanged,
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearchSubmitted(searchQuery) }),
                         textStyle = TextStyle(
                             fontSize = 13.sp,
-                            color = NaturalTextPrimary,
+                            color = theme.primaryText,
                             fontWeight = FontWeight.Normal
                         ),
                         modifier = Modifier
@@ -203,11 +229,78 @@ fun AyurTopHeader(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Clear search",
-                            tint = NaturalOliveMuted,
+                            tint = theme.mutedText,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                 }
+            }
+        }
+
+        // Recent Search History Chips
+        if (searchHistory.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Recent:",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.mutedText
+                )
+                searchHistory.forEach { historyItem ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = theme.cardBg,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, theme.cardBorder),
+                        modifier = Modifier
+                            .clickable { onSearchSubmitted(historyItem) }
+                            .testTag("recent_search_chip_$historyItem")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = theme.primaryBrand,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = historyItem,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = theme.primaryText
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove $historyItem",
+                                tint = theme.mutedText.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clickable { onRemoveSearchHistoryItem(historyItem) }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Clear",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = NaturalTerracotta,
+                    modifier = Modifier
+                        .clickable { onClearSearchHistory() }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                )
             }
         }
     }
@@ -220,26 +313,27 @@ fun AyurBottomNav(
     onTabSelected: (AppTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val theme = AyurTheme.colors
     val showAdminTab = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.PRACTITIONER
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
-        color = NaturalCardSurface,
+        color = theme.cardBg,
         shadowElevation = 4.dp
     ) {
         Column {
             HorizontalDivider(
                 thickness = 1.dp,
-                color = NaturalCardBorder
+                color = theme.cardBorder
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NavItem(
@@ -247,28 +341,24 @@ fun AyurBottomNav(
                     label = "Home",
                     isSelected = currentTab == AppTab.HOME,
                     onClick = { onTabSelected(AppTab.HOME) },
-                    testTag = "nav_home"
+                    testTag = "nav_home",
+                    modifier = Modifier.weight(1f)
                 )
                 NavItem(
-                    emoji = "📖",
-                    label = "Library",
+                    emoji = "🌿",
+                    label = "Catalogue",
                     isSelected = currentTab == AppTab.LIBRARY,
                     onClick = { onTabSelected(AppTab.LIBRARY) },
-                    testTag = "nav_library"
-                )
-                NavItem(
-                    emoji = "📉",
-                    label = "Insights",
-                    isSelected = currentTab == AppTab.INSIGHTS,
-                    onClick = { onTabSelected(AppTab.INSIGHTS) },
-                    testTag = "nav_insights"
+                    testTag = "nav_library",
+                    modifier = Modifier.weight(1f)
                 )
                 NavItem(
                     emoji = "👤",
                     label = "Profile",
                     isSelected = currentTab == AppTab.PROFILE,
                     onClick = { onTabSelected(AppTab.PROFILE) },
-                    testTag = "nav_profile"
+                    testTag = "nav_profile",
+                    modifier = Modifier.weight(1f)
                 )
                 if (showAdminTab) {
                     NavItem(
@@ -276,7 +366,8 @@ fun AyurBottomNav(
                         label = if (currentUserRole == UserRole.ADMIN) "Admin" else "Clinic",
                         isSelected = currentTab == AppTab.ADMIN,
                         onClick = { onTabSelected(AppTab.ADMIN) },
-                        testTag = "nav_admin"
+                        testTag = "nav_admin",
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -290,20 +381,23 @@ private fun NavItem(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    testTag: String
+    testTag: String,
+    modifier: Modifier = Modifier
 ) {
+    val theme = AyurTheme.colors
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier
+        modifier = modifier
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 4.dp, vertical = 6.dp)
             .testTag(testTag)
     ) {
         Text(
             text = emoji,
             fontSize = 20.sp,
-            color = if (isSelected) NaturalMossPrimary else NaturalTextPrimary.copy(alpha = 0.4f)
+            color = if (isSelected) theme.primaryBrand else theme.mutedText.copy(alpha = 0.6f)
         )
         Spacer(modifier = Modifier.height(3.dp))
         Text(
@@ -311,7 +405,9 @@ private fun NavItem(
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp,
-            color = if (isSelected) NaturalMossPrimary else NaturalTextPrimary.copy(alpha = 0.4f)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (isSelected) theme.primaryBrand else theme.mutedText.copy(alpha = 0.6f)
         )
     }
 }
@@ -381,6 +477,9 @@ fun AyurMedicineDetailDialog(
 
                 // Tags
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -617,36 +716,166 @@ fun AyurMedicineDetailDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Action button: Add to Routine
-                Button(
-                    onClick = {
-                        onAddToRoutine(medicine)
-                        onDismiss()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("add_to_routine_button"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NaturalMossPrimary,
-                        contentColor = Color.White
-                    )
+                // Action buttons: Close & Add to Routine
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.BookmarkAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(0.35f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NaturalCardBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NaturalOliveMuted)
+                    ) {
+                        Text(
+                            text = "Close",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            onAddToRoutine(medicine)
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .weight(0.65f)
+                            .height(48.dp)
+                            .testTag("add_to_routine_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NaturalMossPrimary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.BookmarkAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ADD TO ROUTINE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Guest Limited Access Notice Banner
+ * Informs visitors of restricted/read-only mode and provides a direct call-to-action
+ * to sign in or register for full features (clinical console, consultations, personalized regimens).
+ */
+@Composable
+fun GuestLimitedAccessBanner(
+    onSignInClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val theme = AyurTheme.colors
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, theme.sageBorder, RoundedCornerShape(16.dp))
+            .testTag("guest_limited_access_banner"),
+        color = theme.sageContainer.copy(alpha = if (theme.isDark) 0.35f else 0.65f),
+        shadowElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(theme.primaryBrand.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "🍃", fontSize = 14.sp)
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "GUEST ACCESS",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.1.sp,
+                                color = theme.primaryBrandDark
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(theme.primaryBrand)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "LIMITED",
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Classical Formulation Explorer",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.headingText
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onSignInClick,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = theme.primaryBrand,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(34.dp)
+                        .testTag("guest_banner_signin_button")
+                ) {
                     Text(
-                        text = "ADD TO DAILY ROUTINE",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        text = "Sign In / Join",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "You are browsing the herb library in read-only guest mode. Sign in to save personal dosha regimens, consult Ayurvedic practitioners, or access the clinical console.",
+                fontSize = 10.5.sp,
+                color = theme.primaryText.copy(alpha = 0.85f),
+                lineHeight = 15.sp
+            )
         }
     }
 }
